@@ -1,6 +1,7 @@
 import { DoorStatus, Statistics, EventsResponse, AppSettings, DoorState, DeviceItem } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+const BASE_URL = rawBaseUrl.endsWith('/') ? rawBaseUrl.slice(0, -1) : rawBaseUrl;
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
@@ -69,17 +70,6 @@ export const api = {
     fetchJson<{ status: string; settings: AppSettings }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({ alert_threshold_seconds: thresholdSeconds }),
-    }),
-
-  simulateDoor: (state: DoorState, deviceId?: string) =>
-    fetchJson<{ status: string; current_status: DoorStatus }>('/api/simulation/door', {
-      method: 'POST',
-      body: JSON.stringify({ state, device_id: deviceId }),
-    }),
-
-  resetSimulation: () =>
-    fetchJson<{ status: string; deleted_events: number; message: string }>('/api/simulation/reset', {
-      method: 'POST',
     }),
 
   getHealth: () => fetchJson<{ status: string; database: string }>('/api/health'),

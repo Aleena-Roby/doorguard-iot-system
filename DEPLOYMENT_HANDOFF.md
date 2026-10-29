@@ -80,9 +80,25 @@ This guide is written for teammates and developers receiving `DoorGuard_Project.
 
 ---
 
-## 5. Step 4: Deploy Flask Backend to Render
+## 5. Step 4: Deploy Flask Backend & Frontend to Render
+
+You can deploy using either **Option A (Automated Render Blueprint)** or **Option B (Manual Web Service & Static Site)**.
+
+### Option A: 1-Click Render Blueprint (Recommended)
+This repository includes a pre-configured `render.yaml` Blueprint that automatically sets up both the backend web service and frontend static site together:
 
 1. Log in to [render.com](https://render.com/).
+2. Click **New +** -> **Blueprint**.
+3. Connect your GitHub repository (`doorguard-iot-system`).
+4. Render will read `render.yaml` and configure:
+   - `doorguard-backend` (Python Flask REST API with Gunicorn)
+   - `doorguard-frontend` (React + Vite Static Site with automatic SPA rewrite rules)
+5. Under `doorguard-backend`, set `DATABASE_URL` to your **Supabase PostgreSQL URI**.
+6. Click **Apply**. Render will automatically build the backend, apply Alembic migrations against Supabase, compile the React frontend, and bind the URLs together!
+
+---
+
+### Option B: Manual Setup on Render
 2. Click **New +** -> **Web Service**.
 3. Connect your GitHub repository.
 4. Configure the Web Service settings:

@@ -309,13 +309,21 @@ Compress-Archive -Path frontend, backend, firmware, docker-compose.yml, .env.exa
 
 ---
 
-## 10. Future Cloud Deployment (Phase 2 Preview)
+## 10. Cloud Deployment (Supabase & Render)
 
-When handing off to teammates for cloud hosting:
-1. Cloud PostgreSQL: Deploy a free managed database on [Supabase](https://supabase.com).
-2. Backend: Deploy the Flask web service on [Render](https://render.com).
-3. Frontend: Deploy the static React application on [Render](https://render.com).
-4. ESP32: Update `BACKEND_BASE_URL` in `config.h` to your live Render HTTPS URL.
+The project includes a ready-to-deploy **Render Blueprint** (`render.yaml`) and supports managed PostgreSQL on **Supabase**:
+
+1. **Cloud PostgreSQL Database (Supabase):**
+   - Create a project on [Supabase](https://supabase.com).
+   - Copy your PostgreSQL connection URI from **Project Settings** -> **Database**.
+2. **Deploy Backend & Frontend (Render Blueprint):**
+   - In [Render](https://render.com), select **New +** -> **Blueprint**.
+   - Connect this repository (`doorguard-iot-system`).
+   - Supply your Supabase `DATABASE_URL` when prompted.
+   - Render automatically provisions the Flask API with Alembic migrations and builds the React dashboard!
+3. **ESP32 Microcontroller Update:**
+   - Update `BACKEND_BASE_URL` in `firmware/include/config.h` to your live Render backend URL (`https://doorguard-backend.onrender.com`).
+   - Flash the ESP32 to stream physical gate events over the internet directly to Supabase and Render!
 
 Refer to [DEPLOYMENT_HANDOFF.md](DEPLOYMENT_HANDOFF.md) for full step-by-step instructions.
 

@@ -103,7 +103,8 @@ export const App: React.FC = () => {
       } catch (err: any) {
         if (!isMounted) return;
         setIsBackendConnected(false);
-        setErrorMessage('Cannot communicate with Flask backend at http://localhost:5000. Retrying...');
+        const apiTarget = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+        setErrorMessage(`Cannot communicate with backend at ${apiTarget}. Retrying...`);
       } finally {
         isPollingRef.current = false;
       }

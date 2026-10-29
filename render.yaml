@@ -1,0 +1,46 @@
+services:
+  # DoorGuard Flask Backend REST API
+  - type: web
+    name: doorguard-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt && flask --app run.py db upgrade
+    startCommand: gunicorn -w 2 -b 0.0.0.0:$PORT "run:app"
+    healthCheckPath: /api/health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Connect to Supabase PostgreSQL URI (e.g. postgresql://postgres.[REF]:[PASS]@aws-0-[REGION].pooler.supabase.com:6543/postgres)
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: ALERT_DEFAULT_THRESHOLD_SECONDS
+        value: "10"
+      - key: HEARTBEAT_TIMEOUT_SECONDS
+        value: "30"
+      - key: DEFAULT_DEVICE_ID
+        value: "esp32_main_gate"
+      - key: ALLOW_SIMULATION
+        value: "false"
+
+  # DoorGuard React + Vite Static Dashboard
+  - type: web
+    name: doorguard-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: doorguard-backend
+          property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
