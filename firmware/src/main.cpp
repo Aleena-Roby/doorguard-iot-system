@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
+#include <WiFiClientSecure.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <HTTPClient.h>
@@ -145,7 +146,14 @@ bool sendDoorEvent(DoorState state) {
     HTTPClient http;
     String url = backendUrl + "/api/events";
     Serial.printf("[DoorGuard] Sending Event to %s ...\n", url.c_str());
-    http.begin(url);
+
+    WiFiClientSecure secureClient;
+    if (url.startsWith("https://")) {
+        secureClient.setInsecure();
+        http.begin(secureClient, url);
+    } else {
+        http.begin(url);
+    }
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.addHeader("Content-Type", "application/json");
 
@@ -183,7 +191,14 @@ void sendHeartbeat() {
     HTTPClient http;
     String url = backendUrl + "/api/heartbeat";
     Serial.printf("[DoorGuard] Sending Heartbeat to %s ...\n", url.c_str());
-    http.begin(url);
+
+    WiFiClientSecure secureClient;
+    if (url.startsWith("https://")) {
+        secureClient.setInsecure();
+        http.begin(secureClient, url);
+    } else {
+        http.begin(url);
+    }
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.addHeader("Content-Type", "application/json");
 
