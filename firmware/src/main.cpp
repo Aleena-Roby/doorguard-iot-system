@@ -17,9 +17,15 @@
 // Global State & Configuration
 // =====================================================================
 
+// Override weak function in cores/esp32/main.cpp to expand loopTask stack from 8KB to 16KB
+size_t getArduinoLoopTaskStackSize(void) {
+    return 16384;
+}
+
 Preferences preferences;
 WebServer server(80);
 WiFiMulti wifiMulti;
+static WiFiClientSecure secureClient;
 
 String wifiSsid = "";
 String wifiPassword = "";
@@ -147,7 +153,6 @@ bool sendDoorEvent(DoorState state) {
     String url = backendUrl + "/api/events";
     Serial.printf("[DoorGuard] Sending Event to %s ...\n", url.c_str());
 
-    WiFiClientSecure secureClient;
     if (url.startsWith("https://")) {
         secureClient.setInsecure();
         http.begin(secureClient, url);
@@ -156,6 +161,7 @@ bool sendDoorEvent(DoorState state) {
     }
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.addHeader("Content-Type", "application/json");
+    http.addHeader("Connection", "close");
 
     JsonDocument doc;
     doc["device_id"] = deviceId;
@@ -172,15 +178,16 @@ bool sendDoorEvent(DoorState state) {
 
     int httpCode = http.POST(jsonString);
 
+    bool success = false;
     if (httpCode > 0) {
         Serial.printf("[DoorGuard] HTTP Response: %d\n", httpCode);
-        http.end();
-        return (httpCode >= 200 && httpCode < 300);
+        success = (httpCode >= 200 && httpCode < 300);
     } else {
         Serial.printf("[DoorGuard] HTTP Error: %s\n", http.errorToString(httpCode).c_str());
-        http.end();
-        return false;
     }
+    http.end();
+    secureClient.stop();
+    return success;
 }
 
 void sendHeartbeat() {
@@ -192,7 +199,6 @@ void sendHeartbeat() {
     String url = backendUrl + "/api/heartbeat";
     Serial.printf("[DoorGuard] Sending Heartbeat to %s ...\n", url.c_str());
 
-    WiFiClientSecure secureClient;
     if (url.startsWith("https://")) {
         secureClient.setInsecure();
         http.begin(secureClient, url);
@@ -201,6 +207,7 @@ void sendHeartbeat() {
     }
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.addHeader("Content-Type", "application/json");
+    http.addHeader("Connection", "close");
 
     JsonDocument doc;
     doc["device_id"] = deviceId;
@@ -219,6 +226,7 @@ void sendHeartbeat() {
         Serial.printf("[DoorGuard] Heartbeat Failed: %s\n", http.errorToString(httpCode).c_str());
     }
     http.end();
+    secureClient.stop();
 }
 
 // =====================================================================
@@ -419,50 +427,65 @@ void setup() {
         Serial.printf("[Multi-WiFi] Registered: %s\n", KNOWN_NETWORKS[i].ssid);
     }
 
-    // Active scan to discover visible networks
-    Serial.println("\n[WiFi Scan] Scanning for nearby 2.4 GHz networks...");
-    int n = WiFi.scanNetworks();
-    Serial.printf("[WiFi Scan] Discovered %d networks:\n", n);
-    for (int i = 0; i < n; ++i) {
-        String foundSsid = WiFi.SSID(i);
-        int rssi = WiFi.RSSI(i);
-        int ch = WiFi.channel(i);
-        Serial.printf("  [%d] SSID: '%s' | RSSI: %d dBm | Ch: %d\n", i + 1, foundSsid.c_str(), rssi, ch);
+    // Direct Fast Connection to primary SSID
+    Serial.printf("\n[WiFi] Connecting directly to '%s'...\n", WIFI_SSID);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 7000) {
+        delay(300);
+        Serial.print(".");
+        #ifdef STATUS_LED_PIN
+        digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
+        #endif
     }
+    Serial.println();
 
-    int matchedIndex = -1;
-    for (size_t k = 0; k < NUM_KNOWN_NETWORKS; k++) {
-        for (int i = 0; i < n; i++) {
-            if (WiFi.SSID(i).equals(KNOWN_NETWORKS[k].ssid)) {
-                matchedIndex = k;
-                break;
-            }
-        }
-        if (matchedIndex >= 0) break;
-    }
-
-    if (matchedIndex >= 0) {
-        Serial.printf("\n[WiFi] Target known network found: '%s'! Connecting directly...\n", KNOWN_NETWORKS[matchedIndex].ssid);
-        WiFi.begin(KNOWN_NETWORKS[matchedIndex].ssid, KNOWN_NETWORKS[matchedIndex].password);
-        unsigned long start = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) {
-            delay(500);
-            Serial.print(".");
-            #ifdef STATUS_LED_PIN
-            digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
-            #endif
-        }
-        Serial.println();
-    }
-
+    // Fallback if direct primary connection did not succeed
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[Multi-WiFi] Attempting WiFiMulti scan...");
-        unsigned long startAttempt = millis();
-        while (wifiMulti.run() != WL_CONNECTED && millis() - startAttempt < 8000) {
-            delay(800);
-            Serial.print(".");
+        Serial.println("[WiFi Scan] Scanning for nearby 2.4 GHz networks...");
+        int n = WiFi.scanNetworks();
+        Serial.printf("[WiFi Scan] Discovered %d networks:\n", n);
+        for (int i = 0; i < n; ++i) {
+            String foundSsid = WiFi.SSID(i);
+            int rssi = WiFi.RSSI(i);
+            int ch = WiFi.channel(i);
+            Serial.printf("  [%d] SSID: '%s' | RSSI: %d dBm | Ch: %d\n", i + 1, foundSsid.c_str(), rssi, ch);
         }
-        Serial.println();
+
+        int matchedIndex = -1;
+        for (size_t k = 0; k < NUM_KNOWN_NETWORKS; k++) {
+            for (int i = 0; i < n; i++) {
+                if (WiFi.SSID(i).equals(KNOWN_NETWORKS[k].ssid)) {
+                    matchedIndex = k;
+                    break;
+                }
+            }
+            if (matchedIndex >= 0) break;
+        }
+
+        if (matchedIndex >= 0) {
+            Serial.printf("\n[WiFi] Target known network found: '%s'! Connecting directly...\n", KNOWN_NETWORKS[matchedIndex].ssid);
+            WiFi.begin(KNOWN_NETWORKS[matchedIndex].ssid, KNOWN_NETWORKS[matchedIndex].password);
+            unsigned long startScanConn = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - startScanConn < 8000) {
+                delay(400);
+                Serial.print(".");
+                #ifdef STATUS_LED_PIN
+                digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
+                #endif
+            }
+            Serial.println();
+        }
+
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[Multi-WiFi] Attempting WiFiMulti scan...");
+            unsigned long startAttempt = millis();
+            while (wifiMulti.run() != WL_CONNECTED && millis() - startAttempt < 6000) {
+                delay(500);
+                Serial.print(".");
+            }
+            Serial.println();
+        }
     }
 
     if (WiFi.status() == WL_CONNECTED) {

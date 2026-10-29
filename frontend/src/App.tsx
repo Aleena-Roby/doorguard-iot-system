@@ -10,6 +10,7 @@ import { api } from './services/api';
 import { DoorStatus, Statistics, DoorEvent, DeviceItem } from './types';
 import { AlertCircle, AlertTriangle, Bell, X } from 'lucide-react';
 import { notificationManager } from './utils/notifications';
+import { supabase } from './utils/supabase';
 
 export const App: React.FC = () => {
   const [devices, setDevices] = useState<DeviceItem[]>([]);
@@ -77,7 +78,55 @@ export const App: React.FC = () => {
     }
   }, [eventPage, eventLimit, selectedSource, selectedDeviceId]);
 
-  // Status polling loop (every 1 second)
+  // Instant WebSocket Realtime sync with Supabase PostgreSQL
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:realtime_updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        (payload) => {
+          const updated = payload.new as any;
+          if (updated && (!selectedDeviceId || updated.id === selectedDeviceId)) {
+            setStatus((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                current_state: updated.current_state,
+                is_online: updated.is_online,
+                is_alert_active: updated.is_alert_active,
+                last_event_at: updated.last_event_at,
+                last_seen_at: updated.last_seen_at,
+                alert_threshold_seconds: updated.alert_threshold_seconds ?? prev.alert_threshold_seconds,
+              };
+            });
+            fetchAuxiliaryData();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'door_events' },
+        (payload) => {
+          const newEvent = payload.new as any;
+          if (newEvent && (!selectedDeviceId || newEvent.device_id === selectedDeviceId)) {
+            setEvents((prev) => {
+              if (prev.some((e) => e.id === newEvent.id)) return prev;
+              return [newEvent, ...prev.slice(0, eventLimit - 1)];
+            });
+            setTotalEvents((prev) => prev + 1);
+            fetchAuxiliaryData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDeviceId, eventLimit, fetchAuxiliaryData]);
+
+  // Fast status polling loop (every 600ms fallback)
   useEffect(() => {
     let isMounted = true;
 
@@ -111,7 +160,7 @@ export const App: React.FC = () => {
     };
 
     pollStatus();
-    const interval = setInterval(pollStatus, 1000);
+    const interval = setInterval(pollStatus, 600);
 
     return () => {
       isMounted = false;
