@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#ecfdf5" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer Rounded Container -->
+  <rect width="512" height="512" rx="128" fill="url(#bg)" />
+  
+  <!-- Inner Shield Glow -->
+  <circle cx="256" cy="256" r="180" fill="#10b981" opacity="0.3" />
+  
+  <!-- Security Shield Path -->
+  <path d="M 256 90 L 380 145 C 380 270 290 375 256 422 C 222 375 132 270 132 145 Z" 
+        fill="url(#shieldGrad)" 
+        stroke="#065f46" 
+        stroke-width="12" 
+        stroke-linejoin="round" />
+        
+  <!-- Gate & Latch Icon inside Shield -->
+  <rect x="205" y="195" width="102" height="150" rx="8" fill="#047857" />
+  <rect x="220" y="210" width="32" height="120" rx="4" fill="#ffffff" />
+  <rect x="260" y="210" width="32" height="120" rx="4" fill="#ffffff" />
+  <circle cx="282" cy="270" r="7" fill="#059669" />
+  
+  <!-- Security Checkmark Badge -->
+  <circle cx="340" cy="340" r="38" fill="#10b981" stroke="#ffffff" stroke-width="8" />
+  <path d="M 326 340 L 336 350 L 356 330" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+
