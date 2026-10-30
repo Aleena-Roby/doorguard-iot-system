@@ -207,7 +207,7 @@ bool sendDoorEvent(DoorState state) {
         unsigned long elapsed = millis() - t0;
 
         if (httpCode >= 200 && httpCode < 300) {
-            httpClient.getString(); // drain response
+            httpClient.end();
             Serial.printf("[DoorGuard] >>> Ultra-Fast Mumbai Direct Sync in %lums (HTTP %d) <<<\n", elapsed, httpCode);
             return true;
         } else {
@@ -248,7 +248,7 @@ void sendHeartbeat() {
         unsigned long elapsed = millis() - t0;
 
         if (httpCode >= 200 && httpCode < 300) {
-            httpClient.getString(); // drain response
+            httpClient.end();
             Serial.printf("[DoorGuard] Direct Mumbai Heartbeat OK (%d) in %lums | State: %s | RSSI: %d dBm | Pin: %d\n",
                           httpCode, elapsed, doorStateToString(currentDoorState), WiFi.RSSI(), digitalRead(REED_SWITCH_PIN));
             return;
