@@ -47,6 +47,7 @@ DoorState lastDebouncedState = STATE_UNKNOWN;
 int lastRawPinReading = -1;
 unsigned long lastDebounceTime = 0;
 unsigned long lastStateChangeTime = 0;
+unsigned long lastCloseEventTime = 0;
 
 unsigned long lastHeartbeatTime = 0;
 unsigned long lastWifiCheckTime = 0;
@@ -280,10 +281,10 @@ void sendHeartbeat() {
     unsigned long elapsed = millis() - t0;
 
     if (httpCode >= 200 && httpCode < 300) {
-        Serial.printf("[DoorGuard] Heartbeat OK (%d) in %lums | State: %s | RSSI: %d dBm\n",
-                      httpCode, elapsed, doorStateToString(currentDoorState), WiFi.RSSI());
+        Serial.printf("[DoorGuard] Heartbeat OK (%d) in %lums | State: %s | RSSI: %d dBm | Pin: %d\n",
+                      httpCode, elapsed, doorStateToString(currentDoorState), WiFi.RSSI(), digitalRead(REED_SWITCH_PIN));
     } else {
-        Serial.printf("[DoorGuard] Heartbeat Failed (%d) in %lums\n", httpCode, elapsed);
+        Serial.printf("[DoorGuard] Heartbeat Failed (%d) in %lums | Pin: %d\n", httpCode, elapsed, digitalRead(REED_SWITCH_PIN));
     }
 }
 
@@ -594,7 +595,7 @@ void loop() {
     }
 
     // -------------------------------------------------------------
-    // 1. Debounce Sensor Reading & Hysteresis Lockout
+    // 1. Debounce Sensor Reading & Multi-tier Settle Filter
     // -------------------------------------------------------------
     int rawReading = digitalRead(REED_SWITCH_PIN);
 
@@ -604,26 +605,42 @@ void loop() {
         lastRawPinReading = rawReading;
     }
 
+    // Determine required confirmation window:
+    // If transitioning from CLOSED -> OPEN within the post-close settle window (POST_CLOSE_SETTLE_MS = 3.5s),
+    // require SETTLE_OPEN_CONFIRM_MS (800ms) of steady OPEN reading to prevent latch rebound / magnet vibration!
+    // Otherwise, require standard DEBOUNCE_DELAY_MS (250ms).
+    unsigned long requiredDebounceMs = DEBOUNCE_DELAY_MS;
+    if (currentDoorState == STATE_CLOSED && (currentMillis - lastCloseEventTime < POST_CLOSE_SETTLE_MS)) {
+        requiredDebounceMs = SETTLE_OPEN_CONFIRM_MS;
+    }
+
     // Require:
-    // a) Pin has held a steady value for at least DEBOUNCE_DELAY_MS (120ms)
-    // b) We have passed the minimum state hold lockout (STATE_LOCKOUT_MS = 500ms)
+    // a) Pin has held a steady value for at least requiredDebounceMs
+    // b) We have passed the minimum state hold lockout (STATE_LOCKOUT_MS = 1000ms)
     // c) Not currently waiting for an in-flight network dispatch
     if (!pendingStateChange &&
-        (currentMillis - lastDebounceTime) >= DEBOUNCE_DELAY_MS &&
+        (currentMillis - lastDebounceTime) >= requiredDebounceMs &&
         (currentMillis - lastStateChangeTime) >= STATE_LOCKOUT_MS) {
 
         DoorState sampledState = readSensorState();
 
         if (sampledState != currentDoorState) {
-            // Confirm with 2 consecutive micro-samples to completely eliminate contact chatter
-            delayMicroseconds(500);
-            int sample2 = digitalRead(REED_SWITCH_PIN);
-            delayMicroseconds(500);
-            int sample3 = digitalRead(REED_SWITCH_PIN);
+            // Confirm with 5 consecutive micro-samples (1ms apart) to eliminate any electrical transient
+            bool allMatch = true;
+            for (int s = 0; s < 5; s++) {
+                delayMicroseconds(1000);
+                if (digitalRead(REED_SWITCH_PIN) != rawReading) {
+                    allMatch = false;
+                    break;
+                }
+            }
 
-            if (sample2 == rawReading && sample3 == rawReading) {
+            if (allMatch) {
                 currentDoorState = sampledState;
                 lastStateChangeTime = currentMillis;
+                if (currentDoorState == STATE_CLOSED) {
+                    lastCloseEventTime = currentMillis;
+                }
                 pendingStateChange = true;
 
                 Serial.println();
@@ -660,6 +677,10 @@ void loop() {
                 pendingStateChange = false;
                 initialEventSent = true;
                 lastHeartbeatTime = millis();
+
+                if (stateToDispatch == STATE_CLOSED) {
+                    lastCloseEventTime = millis();
+                }
 
                 // CRITICAL: Since sendDoorEvent() spent ~800ms doing network I/O,
                 // resynchronize the debounce timers to current time and re-sample the pin.
