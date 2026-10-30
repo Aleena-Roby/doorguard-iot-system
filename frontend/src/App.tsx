@@ -78,6 +78,17 @@ export const App: React.FC = () => {
     }
   }, [eventPage, eventLimit, selectedSource, selectedDeviceId]);
 
+  const auxFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedFetchAuxiliary = useCallback(() => {
+    if (auxFetchTimeoutRef.current) {
+      clearTimeout(auxFetchTimeoutRef.current);
+    }
+    auxFetchTimeoutRef.current = setTimeout(() => {
+      fetchAuxiliaryData(false);
+    }, 400);
+  }, [fetchAuxiliaryData]);
+
   // Instant WebSocket Realtime sync with Supabase PostgreSQL
   useEffect(() => {
     const channel = supabase
@@ -90,6 +101,9 @@ export const App: React.FC = () => {
           if (updated && (!selectedDeviceId || updated.id === selectedDeviceId)) {
             setStatus((prev) => {
               if (!prev) return updated;
+              const newTs = new Date(updated.last_event_at || updated.last_seen_at || 0).getTime();
+              const prevTs = new Date(prev.last_event_at || prev.last_seen_at || 0).getTime();
+              if (newTs < prevTs) return prev;
               const isOpening = updated.current_state === 'OPEN';
               return {
                 ...prev,
@@ -104,7 +118,7 @@ export const App: React.FC = () => {
                 alert_threshold_seconds: updated.alert_threshold_seconds ?? prev.alert_threshold_seconds,
               };
             });
-            fetchAuxiliaryData();
+            debouncedFetchAuxiliary();
           }
         }
       )
@@ -117,6 +131,9 @@ export const App: React.FC = () => {
             const isOpening = newEvent.state === 'OPEN';
             setStatus((prev) => {
               if (!prev) return prev;
+              const newTs = new Date(newEvent.event_timestamp || newEvent.server_received_at || 0).getTime();
+              const prevTs = new Date(prev.last_event_at || prev.last_seen_at || 0).getTime();
+              if (newTs < prevTs) return prev;
               return {
                 ...prev,
                 current_state: newEvent.state,
@@ -131,7 +148,7 @@ export const App: React.FC = () => {
               return [newEvent, ...prev.slice(0, eventLimit - 1)];
             });
             setTotalEvents((prev) => prev + 1);
-            fetchAuxiliaryData();
+            debouncedFetchAuxiliary();
           }
         }
       )
@@ -139,8 +156,11 @@ export const App: React.FC = () => {
 
     return () => {
       supabase.removeChannel(channel);
+      if (auxFetchTimeoutRef.current) {
+        clearTimeout(auxFetchTimeoutRef.current);
+      }
     };
-  }, [selectedDeviceId, eventLimit, fetchAuxiliaryData]);
+  }, [selectedDeviceId, eventLimit, debouncedFetchAuxiliary]);
 
   // Status polling loop (fallback heartbeat every 1s)
   useEffect(() => {

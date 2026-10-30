@@ -46,6 +46,7 @@ DoorState currentDoorState = STATE_UNKNOWN;
 DoorState lastDebouncedState = STATE_UNKNOWN;
 int lastRawPinReading = -1;
 unsigned long lastDebounceTime = 0;
+unsigned long lastStateChangeTime = 0;
 
 unsigned long lastHeartbeatTime = 0;
 unsigned long lastWifiCheckTime = 0;
@@ -557,6 +558,8 @@ void setup() {
 
     // Queue initial physical state for immediate dispatch once connected
     pendingStateChange = true;
+    lastDebounceTime = millis();
+    lastStateChangeTime = millis();
 }
 
 void loop() {
@@ -591,25 +594,42 @@ void loop() {
     }
 
     // -------------------------------------------------------------
-    // 1. Debounce Sensor Reading (Non-blocking, Always Active)
+    // 1. Debounce Sensor Reading & Hysteresis Lockout
     // -------------------------------------------------------------
     int rawReading = digitalRead(REED_SWITCH_PIN);
 
+    // If raw pin value changed, restart the debounce stabilization timer
     if (rawReading != lastRawPinReading) {
         lastDebounceTime = currentMillis;
         lastRawPinReading = rawReading;
     }
 
-    if ((currentMillis - lastDebounceTime) > DEBOUNCE_DELAY_MS) {
+    // Require:
+    // a) Pin has held a steady value for at least DEBOUNCE_DELAY_MS (120ms)
+    // b) We have passed the minimum state hold lockout (STATE_LOCKOUT_MS = 500ms)
+    // c) Not currently waiting for an in-flight network dispatch
+    if (!pendingStateChange &&
+        (currentMillis - lastDebounceTime) >= DEBOUNCE_DELAY_MS &&
+        (currentMillis - lastStateChangeTime) >= STATE_LOCKOUT_MS) {
+
         DoorState sampledState = readSensorState();
 
         if (sampledState != currentDoorState) {
-            currentDoorState = sampledState;
-            pendingStateChange = true;
+            // Confirm with 2 consecutive micro-samples to completely eliminate contact chatter
+            delayMicroseconds(500);
+            int sample2 = digitalRead(REED_SWITCH_PIN);
+            delayMicroseconds(500);
+            int sample3 = digitalRead(REED_SWITCH_PIN);
 
-            Serial.println();
-            Serial.printf(">>> PHYSICAL SENSOR STATE CHANGED: %s (Raw Pin: %d) <<<\n",
-                          doorStateToString(currentDoorState), rawReading);
+            if (sample2 == rawReading && sample3 == rawReading) {
+                currentDoorState = sampledState;
+                lastStateChangeTime = currentMillis;
+                pendingStateChange = true;
+
+                Serial.println();
+                Serial.printf(">>> PHYSICAL SENSOR STATE CHANGED: %s (Raw Pin: %d) <<<\n",
+                              doorStateToString(currentDoorState), rawReading);
+            }
         }
     }
 
@@ -635,10 +655,18 @@ void loop() {
         }
         // Dispatch Door Events
         if (pendingStateChange) {
-            if (sendDoorEvent(currentDoorState)) {
+            DoorState stateToDispatch = currentDoorState;
+            if (sendDoorEvent(stateToDispatch)) {
                 pendingStateChange = false;
                 initialEventSent = true;
-                lastHeartbeatTime = currentMillis;
+                lastHeartbeatTime = millis();
+
+                // CRITICAL: Since sendDoorEvent() spent ~800ms doing network I/O,
+                // resynchronize the debounce timers to current time and re-sample the pin.
+                // This prevents any false trigger from timer arithmetic after blocking network calls!
+                lastRawPinReading = digitalRead(REED_SWITCH_PIN);
+                lastDebounceTime = millis();
+                lastStateChangeTime = millis();
             }
         }
 
