@@ -75,7 +75,7 @@ export const MainStatusCard: React.FC<MainStatusCardProps> = ({
       soundManager.stopAlarmLoop();
       notificationManager.clearAlert();
     };
-  }, [isThresholdExceeded, status?.device_name, liveDuration, threshold]);
+  }, [isThresholdExceeded, status?.device_name, threshold]);
 
   const handleSelectThreshold = async (value: number) => {
     if (!status || value === status.alert_threshold_seconds) return;

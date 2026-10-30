@@ -233,6 +233,43 @@ int executePost(const char* endpoint, const JsonDocument& doc) {
 
         if (statusLine.length() >= 12 && (statusLine.startsWith("HTTP/1.1 ") || statusLine.startsWith("HTTP/1.0 "))) {
             int code = statusLine.substring(9, 12).toInt();
+
+            // Drain remaining response headers & body so the HTTP keep-alive socket remains clean!
+            int contentLength = -1;
+            bool inHeaders = true;
+            while (secureClient.connected() && inHeaders && (millis() - tStart < 2500)) {
+                String line = "";
+                while (secureClient.connected() && (millis() - tStart < 2500)) {
+                    if (secureClient.available()) {
+                        char c = secureClient.read();
+                        if (c == '\n') break;
+                        if (c != '\r') line += c;
+                    } else {
+                        delay(1);
+                    }
+                }
+                if (line.length() == 0) {
+                    inHeaders = false;
+                    break;
+                }
+                if (line.startsWith("Content-Length:") || line.startsWith("content-length:")) {
+                    contentLength = line.substring(15).toInt();
+                }
+            }
+
+            // Drain body bytes
+            if (contentLength > 0) {
+                unsigned long tBody = millis();
+                while (contentLength > 0 && secureClient.connected() && (millis() - tBody < 1000)) {
+                    if (secureClient.available()) {
+                        secureClient.read();
+                        contentLength--;
+                    } else {
+                        delay(1);
+                    }
+                }
+            }
+
             return code;
         }
 
@@ -605,38 +642,41 @@ void loop() {
         lastRawPinReading = rawReading;
     }
 
-    // Determine required confirmation window:
-    // If transitioning from CLOSED -> OPEN within the post-close settle window (POST_CLOSE_SETTLE_MS = 3.5s),
-    // require SETTLE_OPEN_CONFIRM_MS (800ms) of steady OPEN reading to prevent latch rebound / magnet vibration!
-    // Otherwise, require standard DEBOUNCE_DELAY_MS (250ms).
+    DoorState candidateState = readSensorState();
+
+    // Fast-path for CLOSING: Immediate 30ms confirmation with zero artificial lockout!
+    // When the gate closes, we want the siren to cut off instantly!
     unsigned long requiredDebounceMs = DEBOUNCE_DELAY_MS;
-    if (currentDoorState == STATE_CLOSED && (currentMillis - lastCloseEventTime < POST_CLOSE_SETTLE_MS)) {
-        requiredDebounceMs = SETTLE_OPEN_CONFIRM_MS;
+    if (candidateState == STATE_CLOSED) {
+        requiredDebounceMs = 30; // Instant 30ms closing confirmation
+    } else if (currentDoorState == STATE_CLOSED && (currentMillis - lastCloseEventTime < POST_CLOSE_SETTLE_MS)) {
+        requiredDebounceMs = SETTLE_OPEN_CONFIRM_MS; // 800ms anti-rebound latch filter
     }
+
+    // Lockout check: STATE_LOCKOUT_MS applies ONLY to reopening, NEVER to closing!
+    bool lockoutPassed = (candidateState == STATE_CLOSED) || ((currentMillis - lastStateChangeTime) >= STATE_LOCKOUT_MS);
 
     // Require:
     // a) Pin has held a steady value for at least requiredDebounceMs
-    // b) We have passed the minimum state hold lockout (STATE_LOCKOUT_MS = 1000ms)
+    // b) Lockout condition satisfied
     // c) Not currently waiting for an in-flight network dispatch
     if (!pendingStateChange &&
         (currentMillis - lastDebounceTime) >= requiredDebounceMs &&
-        (currentMillis - lastStateChangeTime) >= STATE_LOCKOUT_MS) {
+        lockoutPassed) {
 
-        DoorState sampledState = readSensorState();
-
-        if (sampledState != currentDoorState) {
-            // Confirm with 5 consecutive micro-samples (1ms apart) to eliminate any electrical transient
+        if (candidateState != currentDoorState) {
+            // Confirm with 3 quick micro-samples
             bool allMatch = true;
-            for (int s = 0; s < 5; s++) {
-                delayMicroseconds(1000);
-                if (digitalRead(REED_SWITCH_PIN) != rawReading) {
+            for (int s = 0; s < 3; s++) {
+                delayMicroseconds(500);
+                if (readSensorState() != candidateState) {
                     allMatch = false;
                     break;
                 }
             }
 
             if (allMatch) {
-                currentDoorState = sampledState;
+                currentDoorState = candidateState;
                 lastStateChangeTime = currentMillis;
                 if (currentDoorState == STATE_CLOSED) {
                     lastCloseEventTime = currentMillis;

@@ -88,20 +88,19 @@ class NotificationManager {
   }
 
   public sendDoorAlert(deviceName: string, durationSeconds: number, thresholdSeconds: number) {
+    const now = Date.now();
+    // Rate-limit both in-app banner and OS tray alerts to avoid UI contention while alarm is sounding
+    if (now - this.lastAlertTimestamp < 10000) return;
+    this.lastAlertTimestamp = now;
+
     const overdue = Math.max(0, Math.round(durationSeconds - thresholdSeconds));
     const title = `⚠️ SECURITY ALERT: ${deviceName} OPEN!`;
     const body = `${deviceName} has been open for ${Math.round(durationSeconds)}s (+${overdue}s beyond safe limit). Tap to inspect.`;
 
-    // Always trigger visual in-app banner
+    // Trigger visual in-app banner
     this.triggerToast(title, body, 'alert');
 
     if (!this.hasPermission || !this.isSupported) return;
-
-    // Rate-limit native OS notifications so we don't spam the OS tray
-    const now = Date.now();
-    if (now - this.lastAlertTimestamp < 10000) return;
-    this.lastAlertTimestamp = now;
-
     this.sendNotification(title, body, 'doorguard-gate-alert');
   }
 
