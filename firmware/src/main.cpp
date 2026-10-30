@@ -43,7 +43,7 @@ enum DoorState {
 };
 
 DoorState currentDoorState = STATE_UNKNOWN;
-DoorState lastDebouncedState = STATE_UNKNOWN;
+DoorState lastSyncedDoorState = STATE_UNKNOWN;
 int lastRawPinReading = -1;
 unsigned long lastDebounceTime = 0;
 unsigned long lastStateChangeTime = 0;
@@ -52,9 +52,6 @@ unsigned long lastCloseEventTime = 0;
 unsigned long lastHeartbeatTime = 0;
 unsigned long lastWifiCheckTime = 0;
 unsigned long sequenceNumber = 0;
-
-bool initialEventSent = false;
-bool pendingStateChange = false;
 
 // =====================================================================
 // Sensor Logic
@@ -141,54 +138,10 @@ void updateNetworkSettings() {
 }
 
 // =====================================================================
-// HTTP Client Methods (Instant Persistent Keep-Alive Socket)
+// HTTP Client Methods (Standard ESP32 HTTPClient with Keep-Alive & Chunked Support)
 // =====================================================================
 
-static String serverHost = "doorguard-backend.onrender.com";
-static uint16_t serverPort = 443;
-static bool isHttps = true;
-
-void parseServerHost() {
-    String temp = backendUrl;
-    if (temp.startsWith("https://")) {
-        isHttps = true;
-        temp = temp.substring(8);
-        serverPort = 443;
-    } else if (temp.startsWith("http://")) {
-        isHttps = false;
-        temp = temp.substring(7);
-        serverPort = 80;
-    }
-    int slashIdx = temp.indexOf('/');
-    if (slashIdx >= 0) {
-        temp = temp.substring(0, slashIdx);
-    }
-    int colonIdx = temp.indexOf(':');
-    if (colonIdx >= 0) {
-        serverPort = temp.substring(colonIdx + 1).toInt();
-        temp = temp.substring(0, colonIdx);
-    }
-    serverHost = temp;
-}
-
-bool ensureConnection() {
-    if (secureClient.connected()) {
-        return true;
-    }
-    secureClient.stop();
-    secureClient.setInsecure();
-    secureClient.setTimeout(4000);
-    parseServerHost();
-    Serial.printf("[TLS] Opening persistent socket to %s:%u...\n", serverHost.c_str(), serverPort);
-    unsigned long start = millis();
-    if (secureClient.connect(serverHost.c_str(), serverPort)) {
-        Serial.printf("[TLS] Connected in %lums (Socket active for instant zero-lag dispatch)\n", millis() - start);
-        return true;
-    } else {
-        Serial.printf("[TLS] Connection failed to %s:%u\n", serverHost.c_str(), serverPort);
-        return false;
-    }
-}
+static HTTPClient httpClient;
 
 int executePost(const char* endpoint, const JsonDocument& doc) {
     if (WiFi.status() != WL_CONNECTED || isApMode) {
@@ -197,88 +150,29 @@ int executePost(const char* endpoint, const JsonDocument& doc) {
 
     String jsonString;
     serializeJson(doc, jsonString);
+    String fullUrl = backendUrl + String(endpoint);
 
-    for (int retry = 0; retry < 2; retry++) {
-        if (!ensureConnection()) {
-            delay(100);
-            continue;
-        }
+    secureClient.setInsecure();
+    httpClient.setReuse(true);
+    httpClient.setTimeout(4000);
 
-        // Flush any lingering unread bytes
-        while (secureClient.available() > 0) {
-            secureClient.read();
-        }
+    if (!httpClient.begin(secureClient, fullUrl)) {
+        Serial.printf("[HTTP] Failed to connect to %s\n", fullUrl.c_str());
+        return -1;
+    }
+    httpClient.addHeader("Content-Type", "application/json");
 
-        // Immediate write to open TLS socket (0ms cryptographic overhead!)
-        secureClient.printf(
-            "POST %s HTTP/1.1\r\n"
-            "Host: %s\r\n"
-            "Content-Type: application/json\r\n"
-            "Connection: keep-alive\r\n"
-            "Content-Length: %u\r\n\r\n%s",
-            endpoint, serverHost.c_str(), (unsigned int)jsonString.length(), jsonString.c_str()
-        );
+    int httpCode = httpClient.POST(jsonString);
 
-        // Read response status line (e.g. "HTTP/1.1 201 Created")
-        unsigned long tStart = millis();
-        String statusLine = "";
-        while (secureClient.connected() && millis() - tStart < 3000) {
-            if (secureClient.available()) {
-                char c = secureClient.read();
-                if (c == '\n') break;
-                if (c != '\r') statusLine += c;
-            }
-            delay(1);
-        }
-
-        if (statusLine.length() >= 12 && (statusLine.startsWith("HTTP/1.1 ") || statusLine.startsWith("HTTP/1.0 "))) {
-            int code = statusLine.substring(9, 12).toInt();
-
-            // Drain remaining response headers & body so the HTTP keep-alive socket remains clean!
-            int contentLength = -1;
-            bool inHeaders = true;
-            while (secureClient.connected() && inHeaders && (millis() - tStart < 2500)) {
-                String line = "";
-                while (secureClient.connected() && (millis() - tStart < 2500)) {
-                    if (secureClient.available()) {
-                        char c = secureClient.read();
-                        if (c == '\n') break;
-                        if (c != '\r') line += c;
-                    } else {
-                        delay(1);
-                    }
-                }
-                if (line.length() == 0) {
-                    inHeaders = false;
-                    break;
-                }
-                if (line.startsWith("Content-Length:") || line.startsWith("content-length:")) {
-                    contentLength = line.substring(15).toInt();
-                }
-            }
-
-            // Drain body bytes
-            if (contentLength > 0) {
-                unsigned long tBody = millis();
-                while (contentLength > 0 && secureClient.connected() && (millis() - tBody < 1000)) {
-                    if (secureClient.available()) {
-                        secureClient.read();
-                        contentLength--;
-                    } else {
-                        delay(1);
-                    }
-                }
-            }
-
-            return code;
-        }
-
-        // Server closed connection, reconnect and retry once
-        Serial.println("[TLS] Keep-alive socket recycled by server. Reconnecting...");
-        secureClient.stop();
+    if (httpCode > 0) {
+        // Automatically decodes chunked transfer encoding and drains body cleanly
+        String resp = httpClient.getString();
+    } else {
+        Serial.printf("[HTTP] POST error: %s (%d)\n", httpClient.errorToString(httpCode).c_str(), httpCode);
+        httpClient.end();
     }
 
-    return -1;
+    return httpCode;
 }
 
 bool sendDoorEvent(DoorState state) {
@@ -492,8 +386,7 @@ void setup() {
     // Sample initial sensor reading
     int initialReading = digitalRead(REED_SWITCH_PIN);
     lastRawPinReading = initialReading;
-    lastDebouncedState = readSensorState();
-    currentDoorState = lastDebouncedState;
+    currentDoorState = readSensorState();
 
     Serial.printf("[Hardware] Initial State: %s (Raw Pin: %d)\n",
                   doorStateToString(currentDoorState), initialReading);
@@ -586,7 +479,6 @@ void setup() {
 
     if (WiFi.status() == WL_CONNECTED) {
         updateNetworkSettings();
-        ensureConnection();
     } else {
         Serial.println("\n[Multi-WiFi] Target network 'moto g96 5G_5200' not detected on 2.4 GHz.");
         Serial.println(">> PLEASE NOTE: Ensure your Phone Hotspot AP Band is set to 2.4 GHz (or 'Extend Compatibility' is turned ON in settings) <<");
@@ -594,8 +486,8 @@ void setup() {
         startApMode();
     }
 
-    // Queue initial physical state for immediate dispatch once connected
-    pendingStateChange = true;
+    // Initialize timers & force initial sync to server as soon as connected
+    lastSyncedDoorState = STATE_UNKNOWN;
     lastDebounceTime = millis();
     lastStateChangeTime = millis();
 }
@@ -632,38 +524,28 @@ void loop() {
     }
 
     // -------------------------------------------------------------
-    // 1. Debounce Sensor Reading & Multi-tier Settle Filter
+    // 1. Physical Sensor Evaluation (Never Blocked by Network State!)
     // -------------------------------------------------------------
     int rawReading = digitalRead(REED_SWITCH_PIN);
+    DoorState candidateState = readSensorState();
 
-    // If raw pin value changed, restart the debounce stabilization timer
     if (rawReading != lastRawPinReading) {
         lastDebounceTime = currentMillis;
         lastRawPinReading = rawReading;
     }
 
-    DoorState candidateState = readSensorState();
-
-    // Fast-path for CLOSING: Immediate 30ms confirmation with zero artificial lockout!
-    // When the gate closes, we want the siren to cut off instantly!
+    // Debounce filter:
+    // Closing (magnet attached): 30ms immediate confirmation
+    // Opening (magnet separated): 60ms steady confirmation
+    // Reopening within post-close settle: 250ms anti-rebound latch filter
     unsigned long requiredDebounceMs = DEBOUNCE_DELAY_MS;
     if (candidateState == STATE_CLOSED) {
         requiredDebounceMs = 30; // Instant 30ms closing confirmation
     } else if (currentDoorState == STATE_CLOSED && (currentMillis - lastCloseEventTime < POST_CLOSE_SETTLE_MS)) {
-        requiredDebounceMs = SETTLE_OPEN_CONFIRM_MS; // 800ms anti-rebound latch filter
+        requiredDebounceMs = 250; // Anti-rebound latch filter
     }
 
-    // Lockout check: STATE_LOCKOUT_MS applies ONLY to reopening, NEVER to closing!
-    bool lockoutPassed = (candidateState == STATE_CLOSED) || ((currentMillis - lastStateChangeTime) >= STATE_LOCKOUT_MS);
-
-    // Require:
-    // a) Pin has held a steady value for at least requiredDebounceMs
-    // b) Lockout condition satisfied
-    // c) Not currently waiting for an in-flight network dispatch
-    if (!pendingStateChange &&
-        (currentMillis - lastDebounceTime) >= requiredDebounceMs &&
-        lockoutPassed) {
-
+    if ((currentMillis - lastDebounceTime) >= requiredDebounceMs) {
         if (candidateState != currentDoorState) {
             // Confirm with 3 quick micro-samples
             bool allMatch = true;
@@ -681,7 +563,6 @@ void loop() {
                 if (currentDoorState == STATE_CLOSED) {
                     lastCloseEventTime = currentMillis;
                 }
-                pendingStateChange = true;
 
                 Serial.println();
                 Serial.printf(">>> PHYSICAL SENSOR STATE CHANGED: %s (Raw Pin: %d) <<<\n",
@@ -710,31 +591,31 @@ void loop() {
             lastConnectedSsid = curSsid;
             updateNetworkSettings();
         }
-        // Dispatch Door Events
-        if (pendingStateChange) {
+
+        // Sync state if current physical state differs from what was last synced with the server
+        if (currentDoorState != lastSyncedDoorState) {
             DoorState stateToDispatch = currentDoorState;
             if (sendDoorEvent(stateToDispatch)) {
-                pendingStateChange = false;
-                initialEventSent = true;
+                lastSyncedDoorState = stateToDispatch;
                 lastHeartbeatTime = millis();
-
                 if (stateToDispatch == STATE_CLOSED) {
                     lastCloseEventTime = millis();
                 }
-
-                // CRITICAL: Since sendDoorEvent() spent ~800ms doing network I/O,
-                // resynchronize the debounce timers to current time and re-sample the pin.
-                // This prevents any false trigger from timer arithmetic after blocking network calls!
-                lastRawPinReading = digitalRead(REED_SWITCH_PIN);
-                lastDebounceTime = millis();
-                lastStateChangeTime = millis();
+            } else {
+                delay(100); // Back off slightly on failure before next loop retry
             }
+
+            // Resynchronize debounce timer and pin reading after network I/O
+            lastRawPinReading = digitalRead(REED_SWITCH_PIN);
+            lastDebounceTime = millis();
         }
 
-        // Send Heartbeat every ~10 seconds
-        if (currentMillis - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS) {
+        // Send Heartbeat every ~6-10s when idle
+        if (currentDoorState == lastSyncedDoorState && (currentMillis - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS)) {
             lastHeartbeatTime = currentMillis;
             sendHeartbeat();
+            lastRawPinReading = digitalRead(REED_SWITCH_PIN);
+            lastDebounceTime = millis();
         }
     }
 

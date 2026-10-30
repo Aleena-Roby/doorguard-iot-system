@@ -132,8 +132,8 @@ export const App: React.FC = () => {
             setStatus((prev) => {
               if (!prev) return prev;
               const newTs = new Date(newEvent.event_timestamp || newEvent.server_received_at || 0).getTime();
-              const prevTs = new Date(prev.last_event_at || prev.last_seen_at || 0).getTime();
-              if (newTs < prevTs) return prev;
+              const prevEventTs = prev.last_event_at ? new Date(prev.last_event_at).getTime() : 0;
+              if (newTs < prevEventTs) return prev;
               return {
                 ...prev,
                 current_state: newEvent.state,
