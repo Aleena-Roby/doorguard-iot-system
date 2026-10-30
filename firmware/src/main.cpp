@@ -139,29 +139,63 @@ void updateNetworkSettings() {
 }
 
 // =====================================================================
-// HTTP Client Methods
+// HTTP Client Methods (Fast Persistent Keep-Alive SSL Connection)
 // =====================================================================
 
-bool sendDoorEvent(DoorState state) {
+static HTTPClient http;
+
+int executePost(const char* endpoint, const JsonDocument& doc) {
     if (WiFi.status() != WL_CONNECTED || isApMode) {
-        return false;
+        return -1;
     }
 
-    sequenceNumber++;
+    String url = backendUrl + endpoint;
+    String jsonString;
+    serializeJson(doc, jsonString);
 
-    HTTPClient http;
-    String url = backendUrl + "/api/events";
-    Serial.printf("[DoorGuard] Sending Event to %s ...\n", url.c_str());
+    bool isHttps = url.startsWith("https://");
 
-    if (url.startsWith("https://")) {
+    if (isHttps) {
         secureClient.setInsecure();
         http.begin(secureClient, url);
     } else {
         http.begin(url);
     }
+
+    http.setReuse(true);
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("Connection", "close");
+    http.addHeader("Connection", "keep-alive");
+
+    int httpCode = http.POST(jsonString);
+
+    // If connection dropped due to server idle timeout, reconnect & retry once
+    if (httpCode <= 0) {
+        Serial.printf("[HTTP] Warm connection expired (%s). Reconnecting immediately...\n",
+                      http.errorToString(httpCode).c_str());
+        http.end();
+        secureClient.stop();
+
+        if (isHttps) {
+            secureClient.setInsecure();
+            http.begin(secureClient, url);
+        } else {
+            http.begin(url);
+        }
+        http.setReuse(true);
+        http.setTimeout(HTTP_TIMEOUT_MS);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("Connection", "keep-alive");
+
+        httpCode = http.POST(jsonString);
+    }
+
+    http.end(); // With setReuse(true), keeps underlying TCP/TLS socket open for next request
+    return httpCode;
+}
+
+bool sendDoorEvent(DoorState state) {
+    sequenceNumber++;
 
     JsonDocument doc;
     doc["device_id"] = deviceId;
@@ -169,64 +203,39 @@ bool sendDoorEvent(DoorState state) {
     doc["source"] = "ESP32";
     doc["sequence_number"] = sequenceNumber;
 
-    String jsonString;
-    serializeJson(doc, jsonString);
+    unsigned long t0 = millis();
+    Serial.printf("[DoorGuard] >>> Dispatched Door Event: %s (Seq: %lu) <<<\n",
+                  doorStateToString(state), sequenceNumber);
 
-    Serial.println();
-    Serial.print("[DoorGuard] Event -> ");
-    Serial.println(jsonString);
+    int httpCode = executePost("/api/events", doc);
+    unsigned long elapsed = millis() - t0;
 
-    int httpCode = http.POST(jsonString);
-
-    bool success = false;
-    if (httpCode > 0) {
-        Serial.printf("[DoorGuard] HTTP Response: %d\n", httpCode);
-        success = (httpCode >= 200 && httpCode < 300);
+    if (httpCode >= 200 && httpCode < 300) {
+        Serial.printf("[DoorGuard] Event Synced in %lums (HTTP %d)\n", elapsed, httpCode);
+        return true;
     } else {
-        Serial.printf("[DoorGuard] HTTP Error: %s\n", http.errorToString(httpCode).c_str());
+        Serial.printf("[DoorGuard] Event Failed in %lums (HTTP %d)\n", elapsed, httpCode);
+        return false;
     }
-    http.end();
-    secureClient.stop();
-    return success;
 }
 
 void sendHeartbeat() {
-    if (WiFi.status() != WL_CONNECTED || isApMode) {
-        return;
-    }
-
-    HTTPClient http;
-    String url = backendUrl + "/api/heartbeat";
-    Serial.printf("[DoorGuard] Sending Heartbeat to %s ...\n", url.c_str());
-
-    if (url.startsWith("https://")) {
-        secureClient.setInsecure();
-        http.begin(secureClient, url);
-    } else {
-        http.begin(url);
-    }
-    http.setTimeout(HTTP_TIMEOUT_MS);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Connection", "close");
-
     JsonDocument doc;
     doc["device_id"] = deviceId;
     doc["state"] = doorStateToString(currentDoorState);
     doc["rssi"] = WiFi.RSSI();
     doc["ip_address"] = WiFi.localIP().toString();
 
-    String jsonString;
-    serializeJson(doc, jsonString);
+    unsigned long t0 = millis();
+    int httpCode = executePost("/api/heartbeat", doc);
+    unsigned long elapsed = millis() - t0;
 
-    int httpCode = http.POST(jsonString);
-    if (httpCode > 0) {
-        Serial.printf("[DoorGuard] Heartbeat OK (%d) | State: %s | RSSI: %d dBm\n",
-                      httpCode, doorStateToString(currentDoorState), WiFi.RSSI());
+    if (httpCode >= 200 && httpCode < 300) {
+        Serial.printf("[DoorGuard] Heartbeat OK (%d) in %lums | State: %s | RSSI: %d dBm\n",
+                      httpCode, elapsed, doorStateToString(currentDoorState), WiFi.RSSI());
     } else {
-        Serial.printf("[DoorGuard] Heartbeat Failed: %s\n", http.errorToString(httpCode).c_str());
+        Serial.printf("[DoorGuard] Heartbeat Failed (%d) in %lums\n", httpCode, elapsed);
     }
-    http.end();
-    secureClient.stop();
 }
 
 // =====================================================================

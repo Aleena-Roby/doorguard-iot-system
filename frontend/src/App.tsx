@@ -89,14 +89,18 @@ export const App: React.FC = () => {
           const updated = payload.new as any;
           if (updated && (!selectedDeviceId || updated.id === selectedDeviceId)) {
             setStatus((prev) => {
-              if (!prev) return prev;
+              if (!prev) return updated;
+              const isOpening = updated.current_state === 'OPEN';
               return {
                 ...prev,
+                ...updated,
                 current_state: updated.current_state,
                 is_online: updated.is_online,
                 is_alert_active: updated.is_alert_active,
                 last_event_at: updated.last_event_at,
                 last_seen_at: updated.last_seen_at,
+                last_opened_at: updated.last_opened_at ?? (isOpening ? (prev.last_opened_at || updated.last_event_at) : null),
+                open_duration_seconds: isOpening ? (prev.open_duration_seconds || 0) : 0,
                 alert_threshold_seconds: updated.alert_threshold_seconds ?? prev.alert_threshold_seconds,
               };
             });
@@ -110,6 +114,18 @@ export const App: React.FC = () => {
         (payload) => {
           const newEvent = payload.new as any;
           if (newEvent && (!selectedDeviceId || newEvent.device_id === selectedDeviceId)) {
+            const isOpening = newEvent.state === 'OPEN';
+            setStatus((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                current_state: newEvent.state,
+                is_online: true,
+                last_event_at: newEvent.event_timestamp || newEvent.server_received_at,
+                last_opened_at: isOpening ? (newEvent.event_timestamp || newEvent.server_received_at) : null,
+                open_duration_seconds: 0,
+              };
+            });
             setEvents((prev) => {
               if (prev.some((e) => e.id === newEvent.id)) return prev;
               return [newEvent, ...prev.slice(0, eventLimit - 1)];
@@ -126,7 +142,7 @@ export const App: React.FC = () => {
     };
   }, [selectedDeviceId, eventLimit, fetchAuxiliaryData]);
 
-  // Fast status polling loop (every 600ms fallback)
+  // Status polling loop (fallback heartbeat every 1s)
   useEffect(() => {
     let isMounted = true;
 
@@ -160,7 +176,7 @@ export const App: React.FC = () => {
     };
 
     pollStatus();
-    const interval = setInterval(pollStatus, 600);
+    const interval = setInterval(pollStatus, 1000);
 
     return () => {
       isMounted = false;
