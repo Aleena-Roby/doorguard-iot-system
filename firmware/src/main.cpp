@@ -232,13 +232,6 @@ bool sendDoorEvent(DoorState state) {
 }
 
 void sendHeartbeat() {
-    // CRITICAL: Only send heartbeat when door is CLOSED (idle state).
-    // When the door is OPEN, we completely eliminate network traffic so the CPU is 100% free
-    // to detect and dispatch the physical closing instantly with 0ms delay!
-    if (currentDoorState != STATE_CLOSED) {
-        return;
-    }
-
     JsonDocument doc;
     doc["device_id"] = deviceId;
     doc["state"] = doorStateToString(currentDoorState);
@@ -648,8 +641,8 @@ void loop() {
             lastDebounceTime = millis();
         }
 
-        // Send Heartbeat every ~15s ONLY when door is CLOSED and idle
-        if (currentDoorState == STATE_CLOSED && currentDoorState == lastSyncedDoorState &&
+        // Send Heartbeat every ~15s when state is idle (keeps device online on dashboard)
+        if (currentDoorState == lastSyncedDoorState &&
             (currentMillis - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS)) {
             lastHeartbeatTime = currentMillis;
             sendHeartbeat();
