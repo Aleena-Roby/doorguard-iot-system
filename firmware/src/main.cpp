@@ -84,9 +84,9 @@ bool ledState = false;
 void updateStatusLed() {
     unsigned long currentMillis = millis();
 
-    // 1. If Door/Gate is OPEN: Rapid Emergency Strobe Alert (every 80 ms)
+    // 1. If Door/Gate is OPEN: Steady slow pulse (every 500 ms) to prevent high-frequency pin crosstalk
     if (currentDoorState == STATE_OPEN) {
-        if (currentMillis - lastLedToggleTime >= 80) {
+        if (currentMillis - lastLedToggleTime >= 500) {
             lastLedToggleTime = currentMillis;
             ledState = !ledState;
             digitalWrite(STATUS_LED_PIN, ledState ? HIGH : LOW);
@@ -188,11 +188,42 @@ bool sendDoorEvent(DoorState state) {
     Serial.printf("[DoorGuard] >>> SENSOR STATE CHANGE: %s (Seq: %lu) <<<\n",
                   doorStateToString(state), sequenceNumber);
 
+    String jsonString;
+    serializeJson(doc, jsonString);
+
+    // 1. Ultra-fast direct dispatch to Supabase REST API in Mumbai (~180ms latency)
+    #ifdef SUPABASE_REST_URL
+    secureClient.setInsecure();
+    httpClient.setReuse(true);
+    httpClient.setTimeout(2500);
+
+    if (httpClient.begin(secureClient, SUPABASE_REST_URL)) {
+        httpClient.addHeader("apikey", SUPABASE_ANON_KEY);
+        httpClient.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+        httpClient.addHeader("Content-Type", "application/json");
+        httpClient.addHeader("Prefer", "return=minimal");
+
+        int httpCode = httpClient.POST(jsonString);
+        unsigned long elapsed = millis() - t0;
+
+        if (httpCode >= 200 && httpCode < 300) {
+            httpClient.getString(); // drain response
+            Serial.printf("[DoorGuard] >>> Ultra-Fast Mumbai Direct Sync in %lums (HTTP %d) <<<\n", elapsed, httpCode);
+            return true;
+        } else {
+            Serial.printf("[DoorGuard] Direct Supabase Sync HTTP %d (%s) in %lums. Using Render fallback...\n",
+                          httpCode, httpClient.errorToString(httpCode).c_str(), elapsed);
+            httpClient.end();
+        }
+    }
+    #endif
+
+    // 2. Fallback to Render Cloud Backend
     int httpCode = executePost("/api/events", doc);
     unsigned long elapsed = millis() - t0;
 
     if (httpCode >= 200 && httpCode < 300) {
-        Serial.printf("[DoorGuard] >>> Event Synced in %lums (HTTP %d) <<<\n", elapsed, httpCode);
+        Serial.printf("[DoorGuard] >>> Fallback Event Synced in %lums (HTTP %d) <<<\n", elapsed, httpCode);
         return true;
     } else {
         Serial.printf("[DoorGuard] Event Failed in %lums (HTTP %d)\n", elapsed, httpCode);
@@ -201,6 +232,13 @@ bool sendDoorEvent(DoorState state) {
 }
 
 void sendHeartbeat() {
+    // CRITICAL: Only send heartbeat when door is CLOSED (idle state).
+    // When the door is OPEN, we completely eliminate network traffic so the CPU is 100% free
+    // to detect and dispatch the physical closing instantly with 0ms delay!
+    if (currentDoorState != STATE_CLOSED) {
+        return;
+    }
+
     JsonDocument doc;
     doc["device_id"] = deviceId;
     doc["state"] = doorStateToString(currentDoorState);
@@ -535,14 +573,14 @@ void loop() {
     }
 
     // Debounce filter:
-    // Closing (magnet attached): 30ms immediate confirmation
-    // Opening (magnet separated): 60ms steady confirmation
-    // Reopening within post-close settle: 250ms anti-rebound latch filter
+    // Closing (magnet attached): 25ms immediate confirmation
+    // Opening (magnet separated): 40ms steady confirmation
+    // Reopening within post-close settle: 150ms anti-rebound latch filter
     unsigned long requiredDebounceMs = DEBOUNCE_DELAY_MS;
     if (candidateState == STATE_CLOSED) {
-        requiredDebounceMs = 30; // Instant 30ms closing confirmation
+        requiredDebounceMs = 25; // Instant 25ms closing confirmation
     } else if (currentDoorState == STATE_CLOSED && (currentMillis - lastCloseEventTime < POST_CLOSE_SETTLE_MS)) {
-        requiredDebounceMs = 250; // Anti-rebound latch filter
+        requiredDebounceMs = 150; // Anti-rebound latch filter
     }
 
     if ((currentMillis - lastDebounceTime) >= requiredDebounceMs) {
@@ -610,8 +648,9 @@ void loop() {
             lastDebounceTime = millis();
         }
 
-        // Send Heartbeat every ~6-10s when idle
-        if (currentDoorState == lastSyncedDoorState && (currentMillis - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS)) {
+        // Send Heartbeat every ~15s ONLY when door is CLOSED and idle
+        if (currentDoorState == STATE_CLOSED && currentDoorState == lastSyncedDoorState &&
+            (currentMillis - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS)) {
             lastHeartbeatTime = currentMillis;
             sendHeartbeat();
             lastRawPinReading = digitalRead(REED_SWITCH_PIN);

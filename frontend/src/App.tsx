@@ -101,15 +101,26 @@ export const App: React.FC = () => {
           if (updated && (!selectedDeviceId || updated.id === selectedDeviceId)) {
             setStatus((prev) => {
               if (!prev) return updated;
-              const newTs = new Date(updated.last_event_at || updated.last_seen_at || 0).getTime();
-              const prevTs = new Date(prev.last_event_at || prev.last_seen_at || 0).getTime();
-              if (newTs < prevTs) return prev;
+
+              const updatedEventTs = updated.last_event_at ? new Date(updated.last_event_at).getTime() : 0;
+              const prevEventTs = prev.last_event_at ? new Date(prev.last_event_at).getTime() : 0;
+
+              // If this update is just a heartbeat or has an older event timestamp,
+              // update online status & heartbeat timestamp without overriding the physical door state!
+              if (updatedEventTs < prevEventTs) {
+                return {
+                  ...prev,
+                  is_online: true,
+                  last_seen_at: updated.last_seen_at || prev.last_seen_at,
+                };
+              }
+
               const isOpening = updated.current_state === 'OPEN';
               return {
                 ...prev,
                 ...updated,
                 current_state: updated.current_state,
-                is_online: updated.is_online,
+                is_online: true,
                 is_alert_active: updated.is_alert_active,
                 last_event_at: updated.last_event_at,
                 last_seen_at: updated.last_seen_at,
