@@ -5,6 +5,7 @@ import { StatsCards } from './components/StatsCards';
 import { ActivityChart } from './components/ActivityChart';
 import { EventHistoryTable } from './components/EventHistoryTable';
 import { DeviceStatusCard } from './components/DeviceStatusCard';
+import { DeviceOfflineCard } from './components/DeviceOfflineCard';
 import { AddDeviceModal } from './components/AddDeviceModal';
 import { api } from './services/api';
 import { DoorStatus, Statistics, DoorEvent, DeviceItem } from './types';
@@ -263,6 +264,30 @@ export const App: React.FC = () => {
     fetchDevices();
   };
 
+  // 1-second dynamic heartbeat countdown & real-time connection freshness tracker
+  const [currentTick, setCurrentTick] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeoutSec = status?.heartbeat_timeout_seconds || 40;
+  const lastSeenMs = status?.last_seen_at ? new Date(status.last_seen_at).getTime() : 0;
+  const isDeviceOnline = Boolean(
+    status &&
+    status.is_online !== false &&
+    lastSeenMs > 0 &&
+    (currentTick - lastSeenMs) <= timeoutSec * 1000
+  );
+
+  // When device is not connected, unconditionally stop any alarm sirens
+  useEffect(() => {
+    if (!isDeviceOnline) {
+      soundManager.stopAlarmLoop();
+      notificationManager.clearAlert();
+    }
+  }, [isDeviceOnline]);
+
   return (
     <div className="min-h-screen bg-white bg-dot-grid flex flex-col font-sans text-slate-800 selection:bg-emerald-500 selection:text-white">
       <Header
@@ -272,6 +297,7 @@ export const App: React.FC = () => {
         onSelectDevice={setSelectedDeviceId}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         isBackendConnected={isBackendConnected}
+        isDeviceOnline={isDeviceOnline}
       />
 
       {/* Floating Push Alert & In-App Notification Toast */}
@@ -314,36 +340,58 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* 1. Main Status Card with Door Graphic, State, Live Timer, and Alert Threshold Selector */}
-        <MainStatusCard
-          status={status}
-          onThresholdChanged={handleThresholdUpdated}
-        />
+        {!isDeviceOnline ? (
+          /* WHEN DEVICE (ESP32) IS NOT CONNECTED: DO NOT SHOW DOOR DATA; SHOW DEVICE NOT CONNECTED */
+          <DeviceOfflineCard
+            status={status}
+            onRefresh={fetchAuxiliaryData}
+            events={events}
+            totalEvents={totalEvents}
+            eventPage={eventPage}
+            eventLimit={eventLimit}
+            isEventsLoading={isEventsLoading}
+            onPageChange={setEventPage}
+            selectedSource={selectedSource}
+            onSourceChange={(src) => {
+              setSelectedSource(src);
+              setEventPage(1);
+            }}
+          />
+        ) : (
+          /* WHEN DEVICE IS CONNECTED: SHOW LIVE MONITORING SUITE */
+          <>
+            {/* 1. Main Status Card with Door Graphic, State, Live Timer, and Alert Threshold Selector */}
+            <MainStatusCard
+              status={status}
+              onThresholdChanged={handleThresholdUpdated}
+            />
 
-        {/* 2. Key Metrics & Daily Statistics Cards */}
-        <StatsCards stats={stats} />
+            {/* 2. Key Metrics & Daily Statistics Cards */}
+            <StatsCards stats={stats} />
 
-        {/* 3. Activity Chart */}
-        <ActivityChart activityData={stats?.activity_chart || []} />
+            {/* 3. Activity Chart */}
+            <ActivityChart activityData={stats?.activity_chart || []} />
 
-        {/* 4. Real-time Persistent Event History Table & Activity Feed */}
-        <EventHistoryTable
-          events={events}
-          total={totalEvents}
-          page={eventPage}
-          limit={eventLimit}
-          isLoading={isEventsLoading}
-          onPageChange={setEventPage}
-          selectedSource={selectedSource}
-          onSourceChange={(src) => {
-            setSelectedSource(src);
-            setEventPage(1);
-          }}
-          onRefresh={fetchAuxiliaryData}
-        />
+            {/* 4. Real-time Persistent Event History Table & Activity Feed */}
+            <EventHistoryTable
+              events={events}
+              total={totalEvents}
+              page={eventPage}
+              limit={eventLimit}
+              isLoading={isEventsLoading}
+              onPageChange={setEventPage}
+              selectedSource={selectedSource}
+              onSourceChange={(src) => {
+                setSelectedSource(src);
+                setEventPage(1);
+              }}
+              onRefresh={fetchAuxiliaryData}
+            />
 
-        {/* 5. Microcontroller & Node Telemetry Diagnostics */}
-        <DeviceStatusCard status={status} />
+            {/* 5. Microcontroller & Node Telemetry Diagnostics */}
+            <DeviceStatusCard status={status} />
+          </>
+        )}
       </main>
 
       {/* Add Device Modal */}

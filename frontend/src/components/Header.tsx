@@ -23,6 +23,7 @@ interface HeaderProps {
   onSelectDevice: (deviceId: string) => void;
   onOpenAddModal: () => void;
   isBackendConnected: boolean;
+  isDeviceOnline?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectDevice,
   onOpenAddModal,
   isBackendConnected,
+  isDeviceOnline = true,
 }) => {
   const [isMuted, setIsMuted] = useState<boolean>(soundManager.getIsMuted());
   const [isAudioReady, setIsAudioReady] = useState<boolean>(soundManager.isReady());
@@ -114,8 +116,14 @@ export const Header: React.FC<HeaderProps> = ({
                   <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900">
                     DoorGuard
                   </h1>
-                  <span className="px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold tracking-wide rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    LIVE
+                  <span
+                    className={`px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold tracking-wide rounded-full border transition-colors ${
+                      isDeviceOnline
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        : 'bg-rose-100 text-rose-800 border-rose-200'
+                    }`}
+                  >
+                    {isDeviceOnline ? 'LIVE' : 'OFFLINE'}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden xs:block">
@@ -222,11 +230,15 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/90 text-xs font-bold text-slate-800 shadow-sm flex-shrink-0">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    status?.current_state === 'OPEN' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'
+                    !isDeviceOnline
+                      ? 'bg-rose-500'
+                      : status?.current_state === 'OPEN'
+                      ? 'bg-rose-500 animate-pulse'
+                      : 'bg-emerald-500'
                   }`}
                 />
                 <span className="truncate max-w-[130px] sm:max-w-none">
-                  {devices[0]?.name || 'Main Gate'}
+                  {devices[0]?.name || 'Main Gate'} {!isDeviceOnline && '(Offline)'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono font-normal hidden sm:inline">
                   ({devices[0]?.id || 'esp32_main_gate'})
