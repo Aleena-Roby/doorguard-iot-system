@@ -59,10 +59,10 @@ export const App: React.FC = () => {
     }
   }, [selectedDeviceId]);
 
-  // Fetch full auxiliary data for selected device
-  const fetchAuxiliaryData = useCallback(async () => {
+  // Fetch full auxiliary data for selected device (smooth silent update without UI flicker)
+  const fetchAuxiliaryData = useCallback(async (showLoadingSpinner = false) => {
     try {
-      setIsEventsLoading(true);
+      if (showLoadingSpinner) setIsEventsLoading(true);
       const [statsData, eventsData] = await Promise.all([
         api.getStats(selectedDeviceId),
         api.getEvents(eventPage, eventLimit, selectedSource, selectedDeviceId),
@@ -74,7 +74,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to load stats/events:', err);
     } finally {
-      setIsEventsLoading(false);
+      if (showLoadingSpinner) setIsEventsLoading(false);
     }
   }, [eventPage, eventLimit, selectedSource, selectedDeviceId]);
 
@@ -154,7 +154,23 @@ export const App: React.FC = () => {
         const currentStatus = await api.getStatus(selectedDeviceId);
         if (!isMounted) return;
 
-        setStatus(currentStatus);
+        // Guard against race conditions: Never overwrite with a stale timestamp from a delayed HTTP poll!
+        setStatus((prev) => {
+          if (!prev) return currentStatus;
+          if (
+            currentStatus.last_event_at &&
+            prev.last_event_at &&
+            new Date(currentStatus.last_event_at).getTime() < new Date(prev.last_event_at).getTime()
+          ) {
+            // Keep the newer real-time state already delivered by WebSocket
+            return {
+              ...prev,
+              is_online: currentStatus.is_online,
+              alert_threshold_seconds: currentStatus.alert_threshold_seconds,
+            };
+          }
+          return currentStatus;
+        });
         setIsBackendConnected(true);
         setErrorMessage(null);
 
@@ -176,7 +192,8 @@ export const App: React.FC = () => {
     };
 
     pollStatus();
-    const interval = setInterval(pollStatus, 1000);
+    // 3.5s background polling fallback (WebSocket handles instantaneous 0-lag updates)
+    const interval = setInterval(pollStatus, 3500);
 
     return () => {
       isMounted = false;

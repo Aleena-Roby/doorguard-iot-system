@@ -139,59 +139,107 @@ void updateNetworkSettings() {
 }
 
 // =====================================================================
-// HTTP Client Methods (Fast Persistent Keep-Alive SSL Connection)
+// HTTP Client Methods (Instant Persistent Keep-Alive Socket)
 // =====================================================================
 
-static HTTPClient http;
+static String serverHost = "doorguard-backend.onrender.com";
+static uint16_t serverPort = 443;
+static bool isHttps = true;
+
+void parseServerHost() {
+    String temp = backendUrl;
+    if (temp.startsWith("https://")) {
+        isHttps = true;
+        temp = temp.substring(8);
+        serverPort = 443;
+    } else if (temp.startsWith("http://")) {
+        isHttps = false;
+        temp = temp.substring(7);
+        serverPort = 80;
+    }
+    int slashIdx = temp.indexOf('/');
+    if (slashIdx >= 0) {
+        temp = temp.substring(0, slashIdx);
+    }
+    int colonIdx = temp.indexOf(':');
+    if (colonIdx >= 0) {
+        serverPort = temp.substring(colonIdx + 1).toInt();
+        temp = temp.substring(0, colonIdx);
+    }
+    serverHost = temp;
+}
+
+bool ensureConnection() {
+    if (secureClient.connected()) {
+        return true;
+    }
+    secureClient.stop();
+    secureClient.setInsecure();
+    secureClient.setTimeout(4000);
+    parseServerHost();
+    Serial.printf("[TLS] Opening persistent socket to %s:%u...\n", serverHost.c_str(), serverPort);
+    unsigned long start = millis();
+    if (secureClient.connect(serverHost.c_str(), serverPort)) {
+        Serial.printf("[TLS] Connected in %lums (Socket active for instant zero-lag dispatch)\n", millis() - start);
+        return true;
+    } else {
+        Serial.printf("[TLS] Connection failed to %s:%u\n", serverHost.c_str(), serverPort);
+        return false;
+    }
+}
 
 int executePost(const char* endpoint, const JsonDocument& doc) {
     if (WiFi.status() != WL_CONNECTED || isApMode) {
         return -1;
     }
 
-    String url = backendUrl + endpoint;
     String jsonString;
     serializeJson(doc, jsonString);
 
-    bool isHttps = url.startsWith("https://");
-
-    if (isHttps) {
-        secureClient.setInsecure();
-        http.begin(secureClient, url);
-    } else {
-        http.begin(url);
-    }
-
-    http.setReuse(true);
-    http.setTimeout(HTTP_TIMEOUT_MS);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Connection", "keep-alive");
-
-    int httpCode = http.POST(jsonString);
-
-    // If connection dropped due to server idle timeout, reconnect & retry once
-    if (httpCode <= 0) {
-        Serial.printf("[HTTP] Warm connection expired (%s). Reconnecting immediately...\n",
-                      http.errorToString(httpCode).c_str());
-        http.end();
-        secureClient.stop();
-
-        if (isHttps) {
-            secureClient.setInsecure();
-            http.begin(secureClient, url);
-        } else {
-            http.begin(url);
+    for (int retry = 0; retry < 2; retry++) {
+        if (!ensureConnection()) {
+            delay(100);
+            continue;
         }
-        http.setReuse(true);
-        http.setTimeout(HTTP_TIMEOUT_MS);
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("Connection", "keep-alive");
 
-        httpCode = http.POST(jsonString);
+        // Flush any lingering unread bytes
+        while (secureClient.available() > 0) {
+            secureClient.read();
+        }
+
+        // Immediate write to open TLS socket (0ms cryptographic overhead!)
+        secureClient.printf(
+            "POST %s HTTP/1.1\r\n"
+            "Host: %s\r\n"
+            "Content-Type: application/json\r\n"
+            "Connection: keep-alive\r\n"
+            "Content-Length: %u\r\n\r\n%s",
+            endpoint, serverHost.c_str(), (unsigned int)jsonString.length(), jsonString.c_str()
+        );
+
+        // Read response status line (e.g. "HTTP/1.1 201 Created")
+        unsigned long tStart = millis();
+        String statusLine = "";
+        while (secureClient.connected() && millis() - tStart < 3000) {
+            if (secureClient.available()) {
+                char c = secureClient.read();
+                if (c == '\n') break;
+                if (c != '\r') statusLine += c;
+            }
+            delay(1);
+        }
+
+        if (statusLine.length() >= 12 && (statusLine.startsWith("HTTP/1.1 ") || statusLine.startsWith("HTTP/1.0 "))) {
+            int code = statusLine.substring(9, 12).toInt();
+            return code;
+        }
+
+        // Server closed connection, reconnect and retry once
+        Serial.println("[TLS] Keep-alive socket recycled by server. Reconnecting...");
+        secureClient.stop();
     }
 
-    http.end(); // With setReuse(true), keeps underlying TCP/TLS socket open for next request
-    return httpCode;
+    return -1;
 }
 
 bool sendDoorEvent(DoorState state) {
@@ -204,14 +252,14 @@ bool sendDoorEvent(DoorState state) {
     doc["sequence_number"] = sequenceNumber;
 
     unsigned long t0 = millis();
-    Serial.printf("[DoorGuard] >>> Dispatched Door Event: %s (Seq: %lu) <<<\n",
+    Serial.printf("[DoorGuard] >>> SENSOR STATE CHANGE: %s (Seq: %lu) <<<\n",
                   doorStateToString(state), sequenceNumber);
 
     int httpCode = executePost("/api/events", doc);
     unsigned long elapsed = millis() - t0;
 
     if (httpCode >= 200 && httpCode < 300) {
-        Serial.printf("[DoorGuard] Event Synced in %lums (HTTP %d)\n", elapsed, httpCode);
+        Serial.printf("[DoorGuard] >>> Event Synced in %lums (HTTP %d) <<<\n", elapsed, httpCode);
         return true;
     } else {
         Serial.printf("[DoorGuard] Event Failed in %lums (HTTP %d)\n", elapsed, httpCode);
@@ -499,6 +547,7 @@ void setup() {
 
     if (WiFi.status() == WL_CONNECTED) {
         updateNetworkSettings();
+        ensureConnection();
     } else {
         Serial.println("\n[Multi-WiFi] Target network 'moto g96 5G_5200' not detected on 2.4 GHz.");
         Serial.println(">> PLEASE NOTE: Ensure your Phone Hotspot AP Band is set to 2.4 GHz (or 'Extend Compatibility' is turned ON in settings) <<");
