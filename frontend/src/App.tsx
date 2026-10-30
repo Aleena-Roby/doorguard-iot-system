@@ -10,6 +10,7 @@ import { api } from './services/api';
 import { DoorStatus, Statistics, DoorEvent, DeviceItem } from './types';
 import { AlertCircle, AlertTriangle, Bell, X } from 'lucide-react';
 import { notificationManager } from './utils/notifications';
+import { soundManager } from './utils/sound';
 import { supabase } from './utils/supabase';
 
 export const App: React.FC = () => {
@@ -140,6 +141,9 @@ export const App: React.FC = () => {
           const newEvent = payload.new as any;
           if (newEvent && (!selectedDeviceId || newEvent.device_id === selectedDeviceId)) {
             const isOpening = newEvent.state === 'OPEN';
+            if (!isOpening) {
+              soundManager.stopAlarmLoop();
+            }
             setStatus((prev) => {
               if (!prev) return prev;
               const newTs = new Date(newEvent.event_timestamp || newEvent.server_received_at || 0).getTime();
@@ -149,6 +153,7 @@ export const App: React.FC = () => {
                 ...prev,
                 current_state: newEvent.state,
                 is_online: true,
+                is_alert_active: isOpening ? prev.is_alert_active : false,
                 last_event_at: newEvent.event_timestamp || newEvent.server_received_at,
                 last_opened_at: isOpening ? (newEvent.event_timestamp || newEvent.server_received_at) : null,
                 open_duration_seconds: 0,
@@ -188,11 +193,10 @@ export const App: React.FC = () => {
         // Guard against race conditions: Never overwrite with a stale timestamp from a delayed HTTP poll!
         setStatus((prev) => {
           if (!prev) return currentStatus;
-          if (
-            currentStatus.last_event_at &&
-            prev.last_event_at &&
-            new Date(currentStatus.last_event_at).getTime() < new Date(prev.last_event_at).getTime()
-          ) {
+          const currentEventTs = currentStatus.last_event_at ? new Date(currentStatus.last_event_at).getTime() : 0;
+          const prevEventTs = prev.last_event_at ? new Date(prev.last_event_at).getTime() : 0;
+
+          if (currentEventTs <= prevEventTs) {
             // Keep the newer real-time state already delivered by WebSocket
             return {
               ...prev,

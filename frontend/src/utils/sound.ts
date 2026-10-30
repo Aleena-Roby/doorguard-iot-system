@@ -6,6 +6,7 @@ class SoundManager {
   private isUnlocked: boolean = false;
   private isAlarmLoopActive: boolean = false;
   private intervalId: any = null;
+  private activeGainNode: GainNode | null = null;
   private subscribers: Set<(isUnlocked: boolean, volume?: number, isMuted?: boolean) => void> = new Set();
   private gestureListenersAttached: boolean = false;
 
@@ -176,6 +177,7 @@ class SoundManager {
 
       // 2. High-output master gain (scaled by user's volume setting)
       const masterGain = ctx.createGain();
+      this.activeGainNode = masterGain;
       const effectiveVol = Math.max(0.1, Math.min(1.0, this.volume));
       masterGain.gain.setValueAtTime(effectiveVol * 0.95, now);
       masterGain.connect(compressor);
@@ -269,6 +271,13 @@ class SoundManager {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
+    }
+    if (this.activeGainNode && this.audioCtx) {
+      try {
+        this.activeGainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+        this.activeGainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+      } catch {}
+      this.activeGainNode = null;
     }
   }
 }

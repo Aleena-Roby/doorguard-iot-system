@@ -232,21 +232,50 @@ bool sendDoorEvent(DoorState state) {
 }
 
 void sendHeartbeat() {
+    #ifdef SUPABASE_RPC_HEARTBEAT_URL
+    unsigned long t0 = millis();
+    secureClient.setInsecure();
+    httpClient.setReuse(true);
+    httpClient.setTimeout(2000);
+
+    if (httpClient.begin(secureClient, SUPABASE_RPC_HEARTBEAT_URL)) {
+        httpClient.addHeader("apikey", SUPABASE_ANON_KEY);
+        httpClient.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+        httpClient.addHeader("Content-Type", "application/json");
+
+        String payload = "{\"p_device_id\":\"" + deviceId + "\"}";
+        int httpCode = httpClient.POST(payload);
+        unsigned long elapsed = millis() - t0;
+
+        if (httpCode >= 200 && httpCode < 300) {
+            httpClient.getString(); // drain response
+            Serial.printf("[DoorGuard] Direct Mumbai Heartbeat OK (%d) in %lums | State: %s | RSSI: %d dBm | Pin: %d\n",
+                          httpCode, elapsed, doorStateToString(currentDoorState), WiFi.RSSI(), digitalRead(REED_SWITCH_PIN));
+            return;
+        } else {
+            Serial.printf("[DoorGuard] Direct Heartbeat HTTP %d (%s) in %lums. Trying fallback...\n",
+                          httpCode, httpClient.errorToString(httpCode).c_str(), elapsed);
+            httpClient.end();
+        }
+    }
+    #endif
+
+    // Fallback to Render Cloud Backend if Supabase direct fails
     JsonDocument doc;
     doc["device_id"] = deviceId;
     doc["state"] = doorStateToString(currentDoorState);
     doc["rssi"] = WiFi.RSSI();
     doc["ip_address"] = WiFi.localIP().toString();
 
-    unsigned long t0 = millis();
+    unsigned long t0Fallback = millis();
     int httpCode = executePost("/api/heartbeat", doc);
-    unsigned long elapsed = millis() - t0;
+    unsigned long elapsedFallback = millis() - t0Fallback;
 
     if (httpCode >= 200 && httpCode < 300) {
-        Serial.printf("[DoorGuard] Heartbeat OK (%d) in %lums | State: %s | RSSI: %d dBm | Pin: %d\n",
-                      httpCode, elapsed, doorStateToString(currentDoorState), WiFi.RSSI(), digitalRead(REED_SWITCH_PIN));
+        Serial.printf("[DoorGuard] Heartbeat OK (Render %d) in %lums | State: %s | RSSI: %d dBm | Pin: %d\n",
+                      httpCode, elapsedFallback, doorStateToString(currentDoorState), WiFi.RSSI(), digitalRead(REED_SWITCH_PIN));
     } else {
-        Serial.printf("[DoorGuard] Heartbeat Failed (%d) in %lums | Pin: %d\n", httpCode, elapsed, digitalRead(REED_SWITCH_PIN));
+        Serial.printf("[DoorGuard] Heartbeat Failed (%d) in %lums | Pin: %d\n", httpCode, elapsedFallback, digitalRead(REED_SWITCH_PIN));
     }
 }
 
@@ -566,22 +595,22 @@ void loop() {
     }
 
     // Debounce filter:
-    // Closing (magnet attached): 25ms immediate confirmation
-    // Opening (magnet separated): 40ms steady confirmation
-    // Reopening within post-close settle: 150ms anti-rebound latch filter
+    // Closing (magnet attached): 15ms immediate confirmation
+    // Opening (magnet separated): 30ms steady confirmation
+    // Reopening within post-close settle: 80ms anti-rebound latch filter
     unsigned long requiredDebounceMs = DEBOUNCE_DELAY_MS;
     if (candidateState == STATE_CLOSED) {
-        requiredDebounceMs = 25; // Instant 25ms closing confirmation
+        requiredDebounceMs = CLOSE_CONFIRM_MS; // Instant 15ms closing confirmation
     } else if (currentDoorState == STATE_CLOSED && (currentMillis - lastCloseEventTime < POST_CLOSE_SETTLE_MS)) {
-        requiredDebounceMs = 150; // Anti-rebound latch filter
+        requiredDebounceMs = 80; // Anti-rebound latch filter
     }
 
     if ((currentMillis - lastDebounceTime) >= requiredDebounceMs) {
         if (candidateState != currentDoorState) {
-            // Confirm with 3 quick micro-samples
+            // Confirm with 3 quick micro-samples (3x 300us = 0.9ms)
             bool allMatch = true;
             for (int s = 0; s < 3; s++) {
-                delayMicroseconds(500);
+                delayMicroseconds(300);
                 if (readSensorState() != candidateState) {
                     allMatch = false;
                     break;
