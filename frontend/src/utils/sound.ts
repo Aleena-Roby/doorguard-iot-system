@@ -12,13 +12,13 @@ class SoundManager {
 
   constructor() {
     // Check localStorage for muted preference
-    const savedMute = localStorage.getItem('doorguard_sound_muted');
+    const savedMute = localStorage.getItem('multiguard_sound_muted') ?? localStorage.getItem('doorguard_sound_muted');
     if (savedMute !== null) {
       this.isMuted = savedMute === 'true';
     }
 
     // Check localStorage for volume preference (defaults to 100% full volume)
-    const savedVol = localStorage.getItem('doorguard_sound_volume');
+    const savedVol = localStorage.getItem('multiguard_sound_volume') ?? localStorage.getItem('doorguard_sound_volume');
     if (savedVol !== null) {
       const parsed = parseInt(savedVol, 10);
       if (!isNaN(parsed) && parsed >= 10 && parsed <= 100) {
@@ -78,7 +78,7 @@ class SoundManager {
   public setVolume(percent: number) {
     const clamped = Math.max(10, Math.min(100, Math.round(percent)));
     this.volume = clamped / 100;
-    localStorage.setItem('doorguard_sound_volume', String(clamped));
+    localStorage.setItem('multiguard_sound_volume', String(clamped));
     this.notifySubscribers();
     if (!this.isMuted) {
       this.playTestBeep();
@@ -99,7 +99,7 @@ class SoundManager {
 
   public setMuted(muted: boolean) {
     this.isMuted = muted;
-    localStorage.setItem('doorguard_sound_muted', muted ? 'true' : 'false');
+    localStorage.setItem('multiguard_sound_muted', muted ? 'true' : 'false');
     if (muted) {
       this.stopAlarmLoop();
     }

@@ -114,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div>
                 <div className="flex items-center space-x-1.5 sm:space-x-2">
                   <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900">
-                    DoorGuard
+                    MultiGuard
                   </h1>
                   <span
                     className={`px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold tracking-wide rounded-full border transition-colors ${
@@ -127,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden xs:block">
-                  Smart Gate & Door Monitoring
+                  Smart Multipurpose Monitoring
                 </p>
               </div>
             </div>
@@ -277,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setIsInstallModalOpen(true)}
                 className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-sm transition-all flex-shrink-0"
-                title="Install DoorGuard on your desktop / home screen"
+                title="Install MultiGuard on your desktop / home screen"
               >
                 <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Install App</span>

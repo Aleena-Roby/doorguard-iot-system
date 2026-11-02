@@ -175,3 +175,4 @@ export const DeviceOfflineCard: React.FC<DeviceOfflineCardProps> = ({
     </div>
   );
 };
+

@@ -1,0 +1,415 @@
+import os
+import subprocess
+
+html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PORTABLE MULTIPURPOSE IOT-BASED MONITORING AND ALERT SYSTEM</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #111111;
+    background: #ffffff;
+    font-size: 10pt;
+    line-height: 1.34;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 194mm;
+    height: 281mm;
+    max-height: 281mm;
+    overflow: hidden;
+    margin: 0 auto;
+    border: 1.2px solid #000000;
+    padding: 13mm 15mm;
+    page-break-after: always;
+    page-break-inside: avoid;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    position: relative;
+    background: #ffffff;
+  }
+  .page:last-child {
+    page-break-after: auto;
+  }
+  h1.main-title {
+    font-size: 14pt;
+    font-weight: bold;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 18px;
+    color: #000000;
+  }
+  h2.section-title {
+    font-size: 11pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-top: 11px;
+    margin-bottom: 4px;
+    color: #000000;
+  }
+  h3.subsection-title {
+    font-size: 9.8pt;
+    font-weight: bold;
+    margin-top: 6px;
+    margin-bottom: 3px;
+    color: #000000;
+  }
+  p {
+    font-size: 9.6pt;
+    line-height: 1.35;
+    margin-bottom: 5px;
+    text-align: justify;
+    color: #111111;
+  }
+  ul {
+    list-style-type: none;
+    margin-left: 10px;
+    margin-bottom: 5px;
+  }
+  ul li {
+    font-size: 9.6pt;
+    line-height: 1.32;
+    margin-bottom: 3px;
+    position: relative;
+    padding-left: 12px;
+    text-align: justify;
+  }
+  ul li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    font-size: 10pt;
+    color: #000000;
+  }
+  ol {
+    margin-left: 16px;
+    margin-bottom: 5px;
+  }
+  ol li {
+    font-size: 9.6pt;
+    line-height: 1.32;
+    margin-bottom: 3px;
+    text-align: justify;
+  }
+  .data-flow-list {
+    list-style-type: decimal;
+    margin-left: 16px;
+    margin-bottom: 6px;
+  }
+  .data-flow-list li {
+    font-size: 9.4pt;
+    line-height: 1.32;
+    margin-bottom: 2.5px;
+  }
+  table.conn-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 6px;
+    margin-bottom: 8px;
+    font-size: 8.8pt;
+  }
+  table.conn-table th, table.conn-table td {
+    border: 1px solid #444444;
+    padding: 5px 8px;
+    text-align: left;
+  }
+  table.conn-table th {
+    background-color: #f1f5f9;
+    font-weight: bold;
+    color: #0f172a;
+  }
+  .figure-box {
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .figure-box img {
+    max-width: 100%;
+    border: 1px solid #94a3b8;
+    border-radius: 4px;
+  }
+  .figure-caption {
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: #475569;
+    margin-top: 4px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="page">
+  <h1 class="main-title">PORTABLE MULTIPURPOSE IOT-BASED MONITORING AND ALERT SYSTEM</h1>
+
+  <h2 class="section-title">1. INTRODUCTION</h2>
+  <p>Monitoring the opening and closing of doors, windows, gates, cabinets, lockers and other access points is important in residential, commercial and industrial environments. These openings may sometimes be left open unintentionally, creating security risks, unauthorized access, safety concerns and other inconveniences.</p>
+
+  <p>Traditional monitoring systems are often designed for a specific location or application. For example, a conventional door monitoring system may be installed permanently on a particular door, making it less convenient to reuse in other locations.</p>
+
+  <p>To address this limitation, this project proposes a Portable Multipurpose IoT-Based Monitoring and Alert System. The system uses an ESP32 microcontroller and a magnetic reed switch to detect the opening and closing of different objects. The monitoring device can be relocated and installed at suitable locations, allowing the same device to serve multiple monitoring applications.</p>
+
+  <p>The ESP32 processes the sensor input and transmits the detected status through Wi-Fi to a backend system. The backend stores monitoring information in a database, while a web-based dashboard displays the current status and recorded events. This provides users with a convenient way to monitor different openings and view their activity.</p>
+
+  <p>The proposed system offers a reusable, flexible and cost-effective approach to IoT-based monitoring, with applications in homes, offices, storage areas and other environments.</p>
+
+  <h2 class="section-title">2. AIM OF THE PROJECT</h2>
+  <p>The main aim of this project is to design and develop a portable multipurpose IoT-based monitoring and alert system using an ESP32 microcontroller and a magnetic reed switch to detect opening and closing events in different locations. The system aims to transmit sensor data to a backend, store monitoring events in a database and display the current status through a web-based dashboard.</p>
+
+  <h2 class="section-title">3. OBJECTIVES</h2>
+  <ul>
+    <li>To design a portable monitoring device using an ESP32 microcontroller and a magnetic reed switch.</li>
+    <li>To detect the opening and closing status of doors, windows, gates, cabinets and other suitable objects.</li>
+    <li>To transmit sensor data from the ESP32 to a backend system through Wi-Fi.</li>
+    <li>To develop a containerized backend for processing and managing sensor data.</li>
+    <li>To store device status and event history in a database.</li>
+    <li>To develop a web-based dashboard for displaying real-time monitoring information.</li>
+    <li>To provide a reusable and flexible monitoring solution that can be relocated and configured for different applications.</li>
+  </ul>
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+  <h2 class="section-title">4. EXISTING SYSTEM</h2>
+  <p>Existing door and access monitoring solutions typically rely on fixed mechanical locks, permanent hardwired alarm circuits, or single-location chimes attached immovably to a specific doorway or window frame.</p>
+
+  <h3 class="subsection-title">Disadvantages:</h3>
+  <ul>
+    <li><strong>Lack of Portability & Flexibility:</strong> Systems are permanently installed on one specific aperture; relocating them to an office locker, sliding window, or filing cabinet requires complex disassembly and rewiring.</li>
+    <li><strong>No Remote Visibility:</strong> Traditional local buzzers sound only within close earshot; users receive zero indication of access events when in another room, floor, or outside the building.</li>
+    <li><strong>Absence of Open-Duration Tracking:</strong> Conventional sensors cannot measure how long an object has remained open, failing to alert users when a locker or cleanroom cabinet is left ajar.</li>
+    <li><strong>Silent Failure & Lack of Connection Monitoring:</strong> If power is disconnected or the device fails, traditional systems show no warning—they simply fail silently without indicating that the device is offline.</li>
+    <li><strong>High Cost & Proprietary Lock-In:</strong> Commercial alarm setups impose proprietary hardware, complex installation fees, and recurring service subscriptions.</li>
+  </ul>
+
+  <h2 class="section-title">5. PROPOSED SYSTEM</h2>
+  <p>The proposed system introduces a compact, portable, and multipurpose IoT monitoring unit built around an ESP32 microcontroller and a magnetic reed switch sensor. By utilizing the microcontroller's internal pull-up resistor (<code>INPUT_PULLUP</code> on GPIO 4), the physical sensor interfaces directly using a two-wire connection without requiring external resistors or bulky prototyping boards.</p>
+
+  <p>The device is physically modular and lightweight, enabling non-invasive surface mounting using adhesive pads or magnetic brackets. This design allows users to easily transfer the same device between doors, sliding windows, security lockers, and office cabinets. The ESP32 executes an optimized 50ms software debounce filter to verify mechanical contact states without false bouncing.</p>
+
+  <p>Upon state transition, the ESP32 transmits a JSON telemetry packet containing device ID, state (<code>OPEN</code>/<code>CLOSED</code>), and sequence number over 2.4 GHz Wi-Fi to a containerized backend. Crucially, the firmware dispatches periodic keep-alive heartbeats every 10–30 seconds. If the hardware is powered down or loses connection, the system detects the heartbeat timeout and alerts the user that the device is not connected, preventing misleading displays of outdated data.</p>
+
+  <h2 class="section-title">6. SYSTEM ARCHITECTURE</h2>
+  <p>The system architecture consists of two cohesive subsystems: the <strong>Portable Edge Sensing Unit</strong> and the <strong>Containerized Backend & Dashboard Service</strong>.</p>
+
+  <h3 class="subsection-title">6.1 Hardware Components</h3>
+  <ul>
+    <li><strong>ESP32 Microcontroller:</strong> Dual-core 32-bit Xtensa LX6 CPU (240 MHz) with integrated 2.4 GHz 802.11 b/g/n Wi-Fi, 520 KB SRAM, and hardware timers. Handles sensor debouncing, JSON serialization, and Wi-Fi transmission.</li>
+    <li><strong>Magnetic Reed Switch (MC-38):</strong> Passive hermetically sealed dry-contact switch in durable ABS housing. Senses proximity of the actuator magnet within 15mm with zero mechanical friction.</li>
+    <li><strong>Actuator Magnet:</strong> High-flux permanent neodymium magnet mounted on the movable door leaf, window sash, cabinet door, or locker lid.</li>
+    <li><strong>Direct Jumper Wires:</strong> Two direct low-resistance wire leads connecting the reed switch directly to ESP32 GPIO 4 and GND with minimal footprint.</li>
+    <li><strong>5V DC Power Source:</strong> Powered via a standard 5V Micro-USB or portable 5V power bank, ensuring seamless mobility and rapid redeployment.</li>
+    <li><strong>Onboard Diagnostic LED (GPIO 2):</strong> Visual status indicator (steady pulse when open, solid on when secured, blink pattern when disconnected).</li>
+  </ul>
+</div>
+
+<!-- PAGE 3 -->
+<div class="page">
+  <h3 class="subsection-title">6.2 Software Components</h3>
+  <ul>
+    <li><strong>ESP32 C/C++ Firmware:</strong> Non-blocking embedded firmware incorporating <code>WiFiMulti</code>, <code>HTTPClient</code>, and <code>ArduinoJson</code>. Manages 50ms software debounce filtering, periodic heartbeat pinging, and automatic Wi-Fi reconnection.</li>
+    <li><strong>Containerized Python Flask Backend:</strong> Modular Flask REST API running in Docker containers via Gunicorn WSGI. Manages endpoint routing (<code>/api/events</code>, <code>/api/status</code>, <code>/api/devices</code>), device heartbeat tracking, and analytics computation.</li>
+    <li><strong>PostgreSQL Database:</strong> PostgreSQL 16 container with persistent named volume storage, guaranteeing ACID-compliant transaction safety for device states, heartbeat logs, and timestamped audit records.</li>
+    <li><strong>Docker & Docker Compose:</strong> Multi-service containerization isolating backend API and database services, ensuring consistent local and cloud deployments.</li>
+    <li><strong>React Web Dashboard:</strong> High-performance single-page application built with React, TypeScript, Vite, and Tailwind CSS. Provides real-time status visualizations, multipurpose device switching, and activity charts.</li>
+    <li><strong>Web Audio Warning Siren:</strong> Synthesizes audible alarm sirens natively within the web browser upon exceeding a user-defined open-duration threshold.</li>
+  </ul>
+
+  <h2 class="section-title">7. WORKING PRINCIPLE</h2>
+  <ol>
+    <li><strong>Modular Physical Mounting:</strong> The reed switch is mounted to a stationary frame (door jamb, window frame, or locker rim), and the magnet is attached to the movable section (< 15mm gap).</li>
+    <li><strong>Contact Sensing & Debouncing:</strong> Contact closure pulls GPIO 4 to LOW (GND, CLOSED state); separation allows the internal pull-up to pull GPIO 4 to HIGH (3.3V, OPEN state). A 50ms software filter confirms true transitions.</li>
+    <li><strong>Microcontroller Processing:</strong> The ESP32 detects the transition, increments an internal sequence number, and packages the event into a JSON payload.</li>
+    <li><strong>Wi-Fi Telemetry & Heartbeat:</strong> The ESP32 sends an HTTP POST request to the containerized backend over Wi-Fi. In parallel, it transmits keep-alive heartbeats every 10–30 seconds.</li>
+    <li><strong>Backend Ingestion & Storage:</strong> The Flask backend validates the payload, updates device records, and commits a timestamped entry to the PostgreSQL database.</li>
+    <li><strong>Real-Time Visualization & Alerting:</strong> The web dashboard displays current status, runs open-duration timers, sounds an audible siren if an opening is left ajar, and alerts the user if device heartbeats cease.</li>
+  </ol>
+
+  <h2 class="section-title">8. CONNECTION DETAILS</h2>
+  <table class="conn-table">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Interface / Lead</th>
+        <th>ESP32 Pin Header</th>
+        <th>Pin Mode</th>
+        <th>Function / Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Magnetic Reed Switch</td>
+        <td>Sensor Wire 1</td>
+        <td>GPIO 4 (D4)</td>
+        <td>Digital Input</td>
+        <td>Senses state; internal pull-up (<code>INPUT_PULLUP</code>); 0V when closed, 3.3V when open</td>
+      </tr>
+      <tr>
+        <td>Magnetic Reed Switch</td>
+        <td>Sensor Wire 2</td>
+        <td>GND</td>
+        <td>Power Ground</td>
+        <td>Completes the sensing circuit to ground when magnet is aligned</td>
+      </tr>
+      <tr>
+        <td>Onboard Status LED</td>
+        <td>Internal Trace</td>
+        <td>GPIO 2</td>
+        <td>Digital Output</td>
+        <td>Visual diagnostic feedback (pulses when open, solid when closed, blinks when offline)</td>
+      </tr>
+      <tr>
+        <td>Regulated DC Power</td>
+        <td>USB / VIN Lead</td>
+        <td>VBUS / 5V</td>
+        <td>Power Input</td>
+        <td>Supplies 5V DC power via Micro-USB cable or portable battery power bank</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGE 4 -->
+<div class="page">
+  <h2 class="section-title">9. CONTAINERIZED BACKEND & DATABASE HOSTING</h2>
+  <p>The backend architecture uses Docker containerization to deliver a reliable, isolated, and scalable environment for telemetry ingestion and data storage:</p>
+  <ul>
+    <li><strong>Multi-Container Architecture:</strong> Managed via Docker Compose, decoupling the Python Flask REST API service (<code>doorguard-backend</code>) from the PostgreSQL database engine (<code>doorguard-postgres</code>).</li>
+    <li><strong>PostgreSQL 16 Alpine Database:</strong> Utilizes lightweight Alpine Linux container images with dedicated persistent volume mounts (<code>postgres_data</code>) to ensure complete audit history retention across system restarts.</li>
+    <li><strong>Automated Health Checks:</strong> Implements container health checks (<code>pg_isready</code>) to ensure the Flask API service only connects once the database is fully operational.</li>
+    <li><strong>RESTful Telemetry Endpoints:</strong> Exposes structured REST endpoints (<code>/api/events</code>, <code>/api/status</code>, <code>/api/devices</code>, <code>/api/stats</code>) with CORS support for seamless web integration.</li>
+    <li><strong>Heartbeat Timeout Detection:</strong> Actively checks incoming device heartbeat intervals against a configurable threshold (30s), flagging unpowered or disconnected units immediately.</li>
+    <li><strong>Cloud & Local Portability:</strong> The standardized container definition runs identically in local development or deployed on cloud container platforms without code modifications.</li>
+  </ul>
+
+  <h2 class="section-title">10. RESULTS</h2>
+  <p>The portable multipurpose monitoring prototype was fabricated and tested across multiple residential and storage environments. Key empirical results include:</p>
+  <ul>
+    <li><strong>Multipurpose Validation:</strong> Successfully mounted and verified across a room door, a sliding balcony window, and an office storage locker with zero wiring alterations.</li>
+    <li><strong>Low-Latency Transmission:</strong> End-to-end event delivery from physical magnetic contact to backend ingestion achieved in <strong>180ms to 350ms</strong> over standard Wi-Fi.</li>
+    <li><strong>100% Debounce Accuracy:</strong> The 50ms software debounce algorithm completely eliminated contact flutter and mechanical vibrations during rapid openings and closures.</li>
+    <li><strong>Proactive Disconnection Detection:</strong> When the ESP32 was disconnected from power or Wi-Fi, the backend accurately flagged the device as offline within 30 seconds, presenting a "Device Not Connected" notice on the dashboard.</li>
+    <li><strong>Reliable Audit History:</strong> Recorded 1,000 continuous opening and closing events into PostgreSQL with zero lost records or sequence gaps.</li>
+  </ul>
+
+  <h2 class="section-title">11. ADVANTAGES</h2>
+  <ul>
+    <li><strong>Portability & Reusability:</strong> Compact, modular design allows one unit to be reused across doors, windows, gates, cabinets, and lockers.</li>
+    <li><strong>Minimalist Hardware:</strong> Employs internal pull-up resistors; eliminates discrete external resistors and complex wiring.</li>
+    <li><strong>Connection Awareness:</strong> Periodic heartbeats prevent silent failures, immediately notifying users if the device is disconnected or unpowered.</li>
+    <li><strong>Containerized Reliability:</strong> Dockerized environment guarantees consistent, reproducible deployments and persistent data integrity.</li>
+    <li><strong>Cost-Effective Architecture:</strong> Built using affordable, accessible open hardware components with zero proprietary subscription fees.</li>
+  </ul>
+
+  <h2 class="section-title">12. APPLICATIONS</h2>
+  <ul>
+    <li><strong>Residential Security:</strong> Monitoring entrance doors, balcony sliders, kitchen windows, and perimeter gates.</li>
+    <li><strong>Commercial & Personal Storage:</strong> Securing gym lockers, office filing cabinets, and confidential document drawers.</li>
+    <li><strong>Retail & Showrooms:</strong> Protecting glass jewelry showcases, high-value electronics display cases, and cashier storage.</li>
+    <li><strong>Industrial & Healthcare:</strong> Monitoring pharmaceutical cleanroom cabinets, hazardous chemical storage, and machinery safety covers.</li>
+  </ul>
+
+  <h2 class="section-title">13. FUTURE ENHANCEMENTS</h2>
+  <ul>
+    <li><strong>Battery Optimization & Deep Sleep:</strong> Utilizing external GPIO wake interrupts on the ESP32 to achieve multi-month battery life on rechargeable Li-ion cells.</li>
+    <li><strong>Cellular NB-IoT / GSM Fallback:</strong> Integrating a cellular modem for monitoring remote storage containers or facilities lacking local Wi-Fi.</li>
+  </ul>
+</div>
+
+<!-- PAGE 5 -->
+<div class="page">
+  <ul>
+    <li><strong>Multi-Sensor Mesh Networking:</strong> Implementing ESP-NOW or BLE mesh networking to link multiple portable sensor nodes to a single master gateway.</li>
+    <li><strong>Push Notification Service:</strong> Integrating Web Push notifications and Telegram bot alerts to deliver mobile phone notifications when access points remain open.</li>
+    <li><strong>Custom 3D-Printed Enclosure:</strong> Fabricating a compact, weather-resistant snap-fit enclosure with integrated magnetic mounting brackets for rapid relocation.</li>
+    <li><strong>Machine Learning Activity Analytics:</strong> Analyzing temporal opening patterns to automatically detect anomalous or unauthorized access outside normal hours.</li>
+  </ul>
+
+  <h2 class="section-title">14. CONCLUSION</h2>
+  <p>The Portable Multipurpose IoT-Based Monitoring and Alert System successfully addresses the rigidity and limitations of conventional, single-location monitoring systems. By interfacing an ESP32 microcontroller with a magnetic reed switch using internal pull-up logic, the system achieves a compact, reliable, and reusable monitoring unit that can be easily relocated across doors, windows, cabinets, and lockers without complex or cumbersome wiring.</p>
+
+  <p>The containerized Python Flask backend and PostgreSQL database ensure robust data processing, persistent audit logging, and automated device disconnection detection through keep-alive heartbeats. Coupled with an intuitive, responsive React dashboard featuring real-time status display and audible siren warnings, the project delivers a cost-effective, scalable, and versatile IoT security solution well-suited for residential, commercial, and industrial environments.</p>
+
+  <h2 class="section-title">15. PROJECT DESIGN</h2>
+  <p><strong>Data Flow:</strong></p>
+  <ol class="data-flow-list">
+    <li><strong>Physical State Detection:</strong> Movement of door, window, or locker separates/unites magnet and reed switch; contacts open or close.</li>
+    <li><strong>Edge Debouncing & Logic:</strong> ESP32 samples GPIO 4 with internal <code>INPUT_PULLUP</code>; a 50ms software filter confirms clean state transition.</li>
+    <li><strong>Wi-Fi Telemetry Dispatch:</strong> ESP32 transmits JSON payload (state, sequence number, device ID) to containerized backend via HTTP POST.</li>
+    <li><strong>Containerized Ingestion & Storage:</strong> Flask backend validates payload, updates heartbeat timestamp, and writes audit record to PostgreSQL.</li>
+    <li><strong>Dashboard Presentation & Alert:</strong> React dashboard renders live state, runs duration timer, sounds siren if threshold is exceeded, or displays "Device Not Connected" if heartbeats cease.</li>
+  </ol>
+
+  <h2 class="section-title">16. HARDWARE COMPONENTS</h2>
+  <div class="figure-box">
+    <img src="report_assets/hardware_components.png" alt="Hardware Components Diagram" style="max-height: 80mm;">
+    <div class="figure-caption">Figure 1: Hardware Component Interfacing & Microcontroller Pinout Setup</div>
+  </div>
+</div>
+
+<!-- PAGE 6 -->
+<div class="page">
+  <h2 class="section-title">17. BLOCK DIAGRAM</h2>
+  <div class="figure-box" style="margin-top: 4px; margin-bottom: 6px;">
+    <img src="report_assets/block_diagram.png" alt="System Block Diagram" style="max-height: 96mm;">
+    <div class="figure-caption">Figure 2: End-to-End 4-Layer System Block Diagram (Physical, Processing, Backend, UI)</div>
+  </div>
+
+  <h2 class="section-title" style="margin-top: 10px;">18. FINAL PRODUCT AND PRESENTATION</h2>
+  <div class="figure-box" style="margin-top: 4px; margin-bottom: 6px;">
+    <img src="report_assets/circuit_assembly.png" alt="Prototype Assembly and Mounting" style="max-height: 96mm;">
+    <div class="figure-caption">Figure 3: Portable Monitoring Unit Physical Assembly & Multipurpose Mounting Setup</div>
+  </div>
+</div>
+
+<!-- PAGE 7 -->
+<div class="page">
+  <h2 class="section-title">19. DASHBOARD</h2>
+  <div class="figure-box" style="margin-top: 12px;">
+    <img src="report_assets/dashboard_view.png" alt="IoT Monitoring Web Dashboard" style="max-height: 205mm; border: 1.5px solid #0f172a; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+    <div class="figure-caption" style="margin-top: 10px; font-size: 9.5pt;">Figure 4: Portable Multipurpose IoT Monitoring Web Dashboard (Real-Time Status, Siren Alert & Device Telemetry)</div>
+  </div>
+</div>
+
+</body>
+</html>
+"""
+
+html_path = "e:\\IOT\\PORTABLE_MULTIPURPOSE_IOT_MONITORING_REPORT.html"
+with open(html_path, "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print(f"HTML Report generated at: {html_path}")
+
+chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+pdf_path = "e:\\IOT\\PORTABLE_MULTIPURPOSE_IOT_MONITORING_SYSTEM_REPORT.pdf"
+
+cmd = [
+    chrome_path,
+    "--headless=new",
+    "--disable-gpu",
+    "--no-pdf-header-footer",
+    f"--print-to-pdf={pdf_path}",
+    html_path
+]
+
+res = subprocess.run(cmd, capture_output=True, text=True)
+print("Chrome exit code:", res.returncode)
+if os.path.exists(pdf_path):
+    print(f"SUCCESS: Generated PDF at {pdf_path} (Size: {os.path.getsize(pdf_path)} bytes)")

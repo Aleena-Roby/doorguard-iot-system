@@ -1,7 +1,7 @@
 {
-  "short_name": "DoorGuard",
-  "name": "DoorGuard — Smart Door & Gate Monitoring",
-  "description": "Real-time IoT Gate Security & Door Open/Close Telemetry",
+  "short_name": "MultiGuard",
+  "name": "MultiGuard — Smart Multipurpose Monitoring",
+  "description": "Real-time IoT Multipurpose Security & Open/Close Telemetry",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -403,7 +403,7 @@ export const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="border-t border-slate-200/80 bg-white/80 backdrop-blur-md py-3 sm:py-4 px-4 sm:px-6 text-center text-[11px] sm:text-xs text-slate-500 font-medium">
-        <p>DoorGuard Smart Gate & Door Monitoring System — Real-Time IoT Microcontroller Platform</p>
+        <p>MultiGuard Multipurpose Monitoring System — Real-Time IoT Microcontroller Platform</p>
       </footer>
     </div>
   );

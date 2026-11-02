@@ -32,7 +32,7 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-slate-900 text-base">Install DoorGuard App</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">Install MultiGuard App</h3>
               <p className="text-xs text-slate-500">Add to Home Screen for fullscreen monitoring</p>
             </div>
           </div>

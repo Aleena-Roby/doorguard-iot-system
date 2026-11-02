@@ -58,9 +58,9 @@ class NotificationManager {
 
       if (this.hasPermission) {
         await this.sendNotification(
-          '🔔 DoorGuard Alerts Enabled',
-          'You will now receive instant push alerts if any door or gate is left open.',
-          'doorguard-welcome'
+          '🔔 MultiGuard Alerts Enabled',
+          'You will now receive instant push alerts if any door, window, or locker is left open.',
+          'multiguard-welcome'
         );
       } else if (permission === 'denied') {
         this.triggerToast('Permission Blocked', 'Please allow notifications in your browser site settings.', 'info');
@@ -81,9 +81,9 @@ class NotificationManager {
     }
 
     await this.sendNotification(
-      '🔔 DoorGuard Alert Active',
+      '🔔 MultiGuard Alert Active',
       'Push notification test successful! Security alerts are working on this device.',
-      'doorguard-test'
+      'multiguard-test'
     );
   }
 
@@ -101,7 +101,7 @@ class NotificationManager {
     this.triggerToast(title, body, 'alert');
 
     if (!this.hasPermission || !this.isSupported) return;
-    this.sendNotification(title, body, 'doorguard-gate-alert');
+    this.sendNotification(title, body, 'multiguard-alert');
   }
 
   public clearAlert() {

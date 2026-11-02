@@ -1,5 +1,5 @@
-// DoorGuard Progressive Web App Service Worker with Push Support
-const CACHE_NAME = 'doorguard-pwa-v1';
+// MultiGuard Progressive Web App Service Worker with Push Support
+const CACHE_NAME = 'multiguard-pwa-v1';
 const PRECACHE_ASSETS = ['/', '/manifest.json', '/pwa-192.png', '/pwa-512.png', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

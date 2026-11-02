@@ -59,7 +59,7 @@ export const EventHistoryTable: React.FC<EventHistoryTableProps> = ({
     const link = document.createElement('a');
     let exportUrl = api.getCsvExportUrl(deviceId, selectedSource);
     link.href = exportUrl;
-    link.setAttribute('download', `doorguard_events.csv`);
+    link.setAttribute('download', `multiguard_events.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -66,6 +66,8 @@ postgres_data/
 .DS_Store
 Thumbs.db
 desktop.ini
+~$*
+*.tmp
 
 # Output Archives
 DoorGuard_Project.zip
